@@ -235,9 +235,10 @@ window.SEQ = {"encomiums":[{"eq":"tributes","ex":"For all the encomiums & tribut
 'use strict';
 
 /* ================= 常量与元素 ================= */
-const DICT_API = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
-const GOOGLE_TR = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=';
-const MYMEMORY_TR = 'https://api.mymemory.translated.net/get?q=';
+const HOSTED = location.protocol === 'https:' && location.hostname.endsWith('.netlify.app');
+const DICT_API = HOSTED ? '/api/dictionary/' : 'https://api.dictionaryapi.dev/api/v2/entries/en/';
+const GOOGLE_TR = (HOSTED ? '/api/translate/google' : 'https://translate.googleapis.com/translate_a/single') + '?client=gtx&sl=en&tl=zh-CN&dt=t&q=';
+const MYMEMORY_TR = (HOSTED ? '/api/translate/mymemory' : 'https://api.mymemory.translated.net/get') + '?q=';
 const SUGGESTIONS = ['subtle', 'pragmatic', 'ephemeral', 'appropriate', 'contentious',
   'ambiguous', 'obscure', 'equivocal', 'mitigate', 'essential'];
 const HIST_KEY = 'greDictHistory';
@@ -313,21 +314,14 @@ async function zhTranslate(text) {
 
 /* ================= 词典 API ================= */
 async function fetchWord(word) {
-  // 免费词典服务偶发 500/502，自动重试 3 次
-  let lastErr = null;
-  for (let i = 0; i < 3; i++) {
-    try {
-      const res = await fetchTimeout(DICT_API + encodeURIComponent(word), 10000);
-      if (res.status === 404) return null;
-      if (res.ok) {
-        const data = await res.json();
-        return Array.isArray(data) ? data : null;
-      }
-      lastErr = new Error('HTTP ' + res.status);
-    } catch (e) { lastErr = e; }
-    await new Promise(r => setTimeout(r, 900 * (i + 1)));
+  const res = await fetchTimeout(DICT_API + encodeURIComponent(word), 8000);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (!Array.isArray(data) || !data.length || !data.every(e => e && typeof e === 'object')) {
+    throw new Error('Invalid dictionary response');
   }
-  throw lastErr;
+  return data;
 }
 
 function parseEntries(entries, query) {
@@ -574,6 +568,7 @@ function tts(word) {
 
 /* ================= 查询主流程 ================= */
 async function doSearch(raw) {
+  const seq = ++reqSeq;
   const word = raw.trim().toLowerCase().replace(/\s+/g, ' ');
   if (!word) return;
   if (!/^[a-z][a-z\s'-]*$/.test(word)) {
@@ -586,32 +581,48 @@ async function doSearch(raw) {
   els.empty.hidden = true;
   els.result.hidden = true;
   els.status.innerHTML = '<div class="loading"><span class="spinner"></span>正在查询…</div>';
-  const seq = ++reqSeq;
+  const local = localLookup(word);
+  const se = seLookup(word);
+  const hasLocal = !!(local || se);
+  if (hasLocal) {
+    renderResult({
+      headword: word, phonetic: '', audioUrl: '',
+      defs: local ? local.d.s.filter(s => s.en).map(s => ({ pos: s.pos, definition: s.en })) : [],
+      examples: [], syns: [], ants: [],
+    }, local, se);
+    addToHistory(word);
+    els.status.innerHTML = '<p class="empty-note">已显示本地词库，正在补充在线释义…</p>';
+    // 本地内容立即可用；发音、收藏和等价词不依赖在线词典。
+    runTranslations(current, local, se, seq);
+  }
 
   try {
     const entries = await fetchWord(word);
     if (seq !== reqSeq) return;
     if (!entries) {
+      if (hasLocal) {
+        els.status.innerHTML = '';
+        return;
+      }
       els.status.innerHTML =
         `<div class="error">没有找到「${esc(word)}」，请检查拼写后重试（目前仅支持英文单词）。</div>`;
       return;
     }
     const parsed = parseEntries(entries, word);
-    const local = localLookup(word);
-    const se = seLookup(word);
     if (!parsed.defs.length && !local && !se) {
       els.status.innerHTML = `<div class="error">「${esc(word)}」暂时没有收录释义。</div>`;
       return;
     }
     els.status.innerHTML = '';
     renderResult(parsed, local, se);
-    addToHistory(word);
+    if (!hasLocal) addToHistory(word);
     runTranslations(parsed, local, se, seq);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
     if (seq !== reqSeq) return;
-    els.status.innerHTML =
-      '<div class="error">查询失败：词典服务暂时不可用，请稍等几秒重试。</div>';
+    els.status.innerHTML = hasLocal
+      ? '<p class="empty-note">已显示本地词库；在线补充暂不可用，仍可查看释义、收藏和播放发音。</p>'
+      : '<div class="error">本地词库未收录这个词，在线词典连接失败。请检查网络或稍后重试。</div>';
   }
 }
 
