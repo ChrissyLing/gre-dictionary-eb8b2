@@ -236,7 +236,7 @@ window.SEQ = {"encomiums":[{"eq":"tributes","ex":"For all the encomiums & tribut
 
 /* ================= 常量与元素 ================= */
 const HOSTED = location.protocol === 'https:' && location.hostname.endsWith('.netlify.app');
-const DICT_API = HOSTED ? '/api/dictionary/' : 'https://api.dictionaryapi.dev/api/v2/entries/en/';
+const DICT_API = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
 const GOOGLE_TR = (HOSTED ? '/api/translate/google' : 'https://translate.googleapis.com/translate_a/single') + '?client=gtx&sl=en&tl=zh-CN&dt=t&q=';
 const MYMEMORY_TR = (HOSTED ? '/api/translate/mymemory' : 'https://api.mymemory.translated.net/get') + '?q=';
 const SUGGESTIONS = ['subtle', 'pragmatic', 'ephemeral', 'appropriate', 'contentious',
