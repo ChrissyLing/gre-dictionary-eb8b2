@@ -1,2 +1,20 @@
 [build]
   publish = "."
+
+[[redirects]]
+  from = "/api/dictionary/*"
+  to = "https://api.dictionaryapi.dev/api/v2/entries/en/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/translate/mymemory"
+  to = "https://api.mymemory.translated.net/get"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/translate/google"
+  to = "https://translate.googleapis.com/translate_a/single"
+  status = 200
+  force = true
