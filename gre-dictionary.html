@@ -208,6 +208,7 @@
   <div class="empty-state" id="emptyState">
     <div class="empty-icon">📚</div>
     <p>已内置《急救1400词》考纲释义与《六选二等价1000词》词对</p>
+    <p>基础英汉词库覆盖 37,065 个词头，并支持常见词形变化。</p>
     <span class="chips-label" style="display:block;text-align:center;margin-bottom:10px;">试试这些 GRE 高频词</span>
     <div class="chips" id="suggestChips"></div>
   </div>
@@ -224,8 +225,8 @@
   </section>
 
   <footer>
-    <span id="appVersion">版本 2026.10.30.3 · 内置词库优先</span><br>
-    词典数据：Free Dictionary API · 翻译：MyMemory / Google<br>
+    <span id="appVersion">版本 2026.10.30.4 · 站内英汉词库</span><br>
+    基础词典：<a href="https://github.com/skywind3000/ECDICT" target="_blank" rel="noopener">ECDICT</a> · 释义和音标随本站提供 · 例句翻译按需联网<br>
     考纲释义与六选二等价词来自《学而思GRE急救1400词（2026版）》《学而思GRE高频六选二等价1000词（2026版）》· 仅供个人学习使用
   </footer>
 </div>
@@ -237,7 +238,6 @@ window.SEQ = {"encomiums":[{"eq":"tributes","ex":"For all the encomiums & tribut
 
 /* ================= 常量与元素 ================= */
 const HOSTED = location.protocol === 'https:' && location.hostname.endsWith('.netlify.app');
-const DICT_API = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
 const GOOGLE_TR = (HOSTED ? '/api/translate/google' : 'https://translate.googleapis.com/translate_a/single') + '?client=gtx&sl=en&tl=zh-CN&dt=t&q=';
 const MYMEMORY_TR = (HOSTED ? '/api/translate/mymemory' : 'https://api.mymemory.translated.net/get') + '?q=';
 const SUGGESTIONS = ['subtle', 'pragmatic', 'ephemeral', 'appropriate', 'contentious',
@@ -313,58 +313,46 @@ async function zhTranslate(text) {
   }
 }
 
-/* ================= 词典 API ================= */
-async function fetchWord(word) {
-  const res = await fetchTimeout(DICT_API + encodeURIComponent(word), 8000);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
-  if (!Array.isArray(data) || !data.length || !data.every(e => e && typeof e === 'object')) {
-    throw new Error('Invalid dictionary response');
+/* ================= 站内词库 ================= */
+const dictionaryShards = new Map();
+async function dictionaryShard(letter) {
+  if (!dictionaryShards.has(letter)) {
+    const request = fetchTimeout('data/v4/' + letter + '.json', 12000).then(async res => {
+      if (!res.ok) throw new Error('Dictionary asset HTTP ' + res.status);
+      const data = await res.json();
+      if (!data || Array.isArray(data) || typeof data !== 'object') throw new Error('Invalid dictionary asset');
+      return data;
+    }).catch(error => { dictionaryShards.delete(letter); throw error; });
+    dictionaryShards.set(letter, request);
   }
-  return data;
+  return dictionaryShards.get(letter);
 }
-
-function parseEntries(entries, query) {
-  const headword = entries[0].word || query;
-  let phonetic = entries[0].phonetic || '';
-  let audioUrl = '';
-  for (const e of entries) for (const p of (e.phonetics || [])) {
-    if (!phonetic && p.text) phonetic = p.text;
-    if (!audioUrl && p.audio) audioUrl = p.audio;
-  }
-
-  const defs = [];
-  const syns = new Set();
-  const ants = new Set();
-  const exSet = new Set();
-  const examples = [];
-
-  const pushEx = t => {
-    const k = t.toLowerCase();
-    if (!exSet.has(k) && examples.length < 5) { exSet.add(k); examples.push(t); }
-  };
-  const pushSyn = (set, w) => {
-    if (w && w.toLowerCase() !== headword.toLowerCase()) set.add(w.trim());
-  };
-
-  for (const e of entries) {
-    for (const m of (e.meanings || [])) {
-      const pos = m.partOfSpeech || '';
-      (m.synonyms || []).forEach(s => pushSyn(syns, s));
-      (m.antonyms || []).forEach(a => pushSyn(ants, a));
-      for (const d of (m.definitions || [])) {
-        if (d.definition && defs.length < 10) defs.push({ pos, definition: d.definition });
-        if (d.example) pushEx(d.example);
-        (d.synonyms || []).forEach(s => pushSyn(syns, s));
-        (d.antonyms || []).forEach(a => pushSyn(ants, a));
-      }
+async function basicLookup(word) {
+  for (const candidate of stemVariants(word)) {
+    const shard = await dictionaryShard(candidate[0]);
+    if (!Object.prototype.hasOwnProperty.call(shard, candidate)) continue;
+    let d = shard[candidate];
+    let key = candidate;
+    if (typeof d === 'string') {
+      key = d;
+      const roots = await dictionaryShard(key[0]);
+      d = Object.prototype.hasOwnProperty.call(roots, key) ? roots[key] : null;
     }
+    if (d && typeof d === 'object') return { key, d };
   }
+  return null;
+}
+function basicResult(word, basic, local) {
+  const d = basic ? basic.d : null;
+  const defs = d && d.e ? d.e.split('\n').filter(Boolean).slice(0, 12).map(definition => {
+    const match = definition.match(/^(?:\(([nvasr])\)|([nvasr])\.)\s*/);
+    const pos = match ? ({ n: 'n.', v: 'v.', a: 'adj.', s: 'adj.', r: 'adv.' }[match[1] || match[2]]) : '';
+    return { pos, definition: match ? definition.slice(match[0].length) : definition };
+  }) : (local ? local.d.s.filter(s => s.en).map(s => ({ pos: s.pos, definition: s.en, translation: s.zh })) : []);
   return {
-    headword, phonetic, audioUrl, defs, examples,
-    syns: [...syns].slice(0, 16),
-    ants: [...ants].slice(0, 12),
+    headword: basic ? basic.key : (local ? local.key : word),
+    phonetic: local && local.d.p ? local.d.p : (d ? d.p || '' : ''),
+    zh: d ? d.z || '' : '', audioUrl: '', defs, examples: [], syns: [], ants: [],
   };
 }
 
@@ -397,12 +385,12 @@ function stemVariants(word) {
 }
 function localLookup(word) {
   if (!window.W1400) return null;
-  for (const t of stemVariants(word)) if (W1400[t]) return { key: t, d: W1400[t] };
+  for (const t of stemVariants(word)) if (Object.prototype.hasOwnProperty.call(W1400, t)) return { key: t, d: W1400[t] };
   return null;
 }
 function seLookup(word) {
   if (!window.SEQ) return null;
-  for (const t of stemVariants(word)) if (SEQ[t]) return { key: t, list: SEQ[t] };
+  for (const t of stemVariants(word)) if (Object.prototype.hasOwnProperty.call(SEQ, t)) return { key: t, list: SEQ[t] };
   return null;
 }
 
@@ -416,11 +404,11 @@ function renderResult(p, local, se) {
 
   const defsHtml = p.defs.length ? [...groups.entries()].map(([pos, list]) => `
     <div class="pos-group">
-      <span class="pos-tag">${esc(pos)}</span>
+      ${pos ? `<span class="pos-tag">${esc(pos)}</span>` : ''}
       ${list.map(d => `
         <div class="definition">
           <p class="def-en">${esc(d.definition)}</p>
-          <p class="def-zh"><span class="pending">翻译中…</span></p>
+          ${d.translation ? `<p class="def-zh">${esc(d.translation)}</p>` : ''}
         </div>`).join('')}
     </div>`).join('') : '';
 
@@ -454,13 +442,13 @@ function renderResult(p, local, se) {
   const seExHtml = se ? se.list.map(e => `
       <div class="example">
         <p class="ex-en"><span class="se-label">六选二真题</span>${highlight(e.ex, [se.key, e.eq])}</p>
-        <p class="ex-zh"><span class="pending">翻译中…</span></p>
+        <p class="ex-zh"><button class="text-btn" type="button" data-translate-example="${esc(e.ex)}">翻译例句</button></p>
       </div>`).join('') : '';
   const apiExHtml = p.examples.length
     ? p.examples.map(ex => `
         <div class="example">
           <p class="ex-en">${highlight(ex, p.headword)}</p>
-          <p class="ex-zh"><span class="pending">翻译中…</span></p>
+          <p class="ex-zh"><button class="text-btn" type="button" data-translate-example="${esc(ex)}">翻译例句</button></p>
         </div>`).join('')
     : (se ? '' : '<p class="empty-note">这个词暂未收录例句，可以试试在近义词里找找看 🙈</p>');
   const exCard = (se || p.examples.length) ? `
@@ -489,7 +477,7 @@ function renderResult(p, local, se) {
 
   const wordZhHtml = local
     ? esc(local.d.s.map(s => s.zh).join('；'))
-    : '<span class="pending">翻译中…</span>';
+    : esc(p.zh ? p.zh.replace(/\n/g, '；') : '已收录等价词和例句');
 
   els.result.innerHTML = `
     <div class="card word-card">
@@ -514,36 +502,27 @@ function renderResult(p, local, se) {
   `;
   els.result.hidden = false;
   updateStarBtn();
-  if (local) syncFavZh(p.headword, local.d.s.map(s => s.zh).join('；'));
+  syncFavZh(p.headword, local ? local.d.s.map(s => s.zh).join('；') : p.zh || '');
 
   document.getElementById('audioBtn').addEventListener('click', playAudio);
   document.getElementById('starBtn').addEventListener('click', toggleStar);
 }
 
-/* 异步填充中文翻译 */
-async function translateInto(el, text, seq, cb) {
+/* 例句翻译由用户点击触发；查词不调用第三方接口。 */
+async function translateExample(button) {
+  const text = button.dataset.translateExample;
+  const seq = reqSeq;
+  button.disabled = true;
+  button.textContent = '正在翻译…';
   try {
     const zh = await zhTranslate(text);
-    if (seq !== reqSeq || !el.isConnected) return;
-    el.textContent = zh;
-    if (cb) cb(zh);
+    if (seq !== reqSeq || !button.isConnected) return;
+    button.parentElement.textContent = zh;
   } catch (e) {
-    if (seq === reqSeq && el.isConnected) el.textContent = '';
+    if (seq !== reqSeq || !button.isConnected) return;
+    button.disabled = false;
+    button.textContent = '翻译暂不可用，点击重试';
   }
-}
-
-function runTranslations(p, local, se, seq) {
-  const wordZhEl = document.getElementById('wordZh');
-  if (!local) {
-    translateInto(wordZhEl, p.headword, seq, zh => syncFavZh(p.headword, zh));
-  }
-  els.result.querySelectorAll('.def-zh').forEach((el, i) => {
-    if (p.defs[i]) translateInto(el, p.defs[i].definition, seq);
-  });
-  const allEx = (se ? se.list.map(e => e.ex) : []).concat(p.examples);
-  els.result.querySelectorAll('.ex-zh').forEach((el, i) => {
-    if (allEx[i]) translateInto(el, allEx[i], seq);
-  });
 }
 
 /* ================= 发音 ================= */
@@ -586,44 +565,25 @@ async function doSearch(raw) {
   const se = seLookup(word);
   const hasLocal = !!(local || se);
   if (hasLocal) {
-    renderResult({
-      headword: word, phonetic: '', audioUrl: '',
-      defs: local ? local.d.s.filter(s => s.en).map(s => ({ pos: s.pos, definition: s.en })) : [],
-      examples: [], syns: [], ants: [],
-    }, local, se);
+    renderResult(basicResult(word, null, local), local, se);
     addToHistory(word);
-    els.status.innerHTML = '<p class="empty-note">已显示本地词库，正在补充在线释义…</p>';
-    // 本地内容立即可用；发音、收藏和等价词不依赖在线词典。
-    runTranslations(current, local, se, seq);
-  }
-
-  try {
-    const entries = await fetchWord(word);
-    if (seq !== reqSeq) return;
-    if (!entries) {
-      if (hasLocal) {
-        els.status.innerHTML = '';
-        return;
-      }
-      els.status.innerHTML =
-        `<div class="error">没有找到「${esc(word)}」，请检查拼写后重试（目前仅支持英文单词）。</div>`;
-      return;
-    }
-    const parsed = parseEntries(entries, word);
-    if (!parsed.defs.length && !local && !se) {
-      els.status.innerHTML = `<div class="error">「${esc(word)}」暂时没有收录释义。</div>`;
-      return;
-    }
     els.status.innerHTML = '';
-    renderResult(parsed, local, se);
+  }
+  try {
+    const basic = await basicLookup(word);
+    if (seq !== reqSeq) return;
+    if (!basic && !hasLocal) {
+      els.status.innerHTML = `<div class="error">站内词库暂未收录「${esc(word)}」，请检查拼写或尝试单词原形。</div>`;
+      return;
+    }
+    if (basic) renderResult(basicResult(word, basic, local), local, se);
+    els.status.innerHTML = '';
     if (!hasLocal) addToHistory(word);
-    runTranslations(parsed, local, se, seq);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) {
     if (seq !== reqSeq) return;
-    els.status.innerHTML = hasLocal
-      ? '<p class="empty-note">已显示本地词库；在线补充暂不可用，仍可查看释义、收藏和播放发音。</p>'
-      : '<div class="error">本地词库未收录这个词，在线词典连接失败。请检查网络或稍后重试。</div>';
+    // 已有的 GRE 释义继续保留；站内资源失败可通过重试重新加载。
+    els.status.innerHTML = hasLocal ? '' : '<div class="error">站内词库文件未能加载，请再次点击查询重试。</div>';
   }
 }
 
@@ -725,6 +685,8 @@ document.addEventListener('keydown', e => {
 
 /* 所有词块（历史 / 推荐 / 生词本 / 近义词）统一代理点击查询 */
 document.addEventListener('click', e => {
+  const translator = e.target.closest('[data-translate-example]');
+  if (translator) { translateExample(translator); return; }
   const chip = e.target.closest('[data-word]');
   if (chip) { doSearch(chip.dataset.word); return; }
   const rm = e.target.closest('.fav-remove');
