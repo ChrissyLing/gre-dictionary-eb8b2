@@ -3,25 +3,31 @@
 
 [[redirects]]
   from = "/"
-  to = "/dictionary-20261030-v4.html"
+  to = "/dictionary-20261031-v5.html"
   status = 302
   force = true
 
 [[redirects]]
   from = "/index.html"
-  to = "/dictionary-20261030-v4.html"
+  to = "/dictionary-20261031-v5.html"
   status = 302
   force = true
 
 [[redirects]]
   from = "/gre-dictionary.html"
-  to = "/dictionary-20261030-v4.html"
+  to = "/dictionary-20261031-v5.html"
   status = 302
   force = true
 
 [[redirects]]
   from = "/dictionary-20261030-v3.html"
-  to = "/dictionary-20261030-v4.html"
+  to = "/dictionary-20261031-v5.html"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "/dictionary-20261030-v4.html"
+  to = "/dictionary-20261031-v5.html"
   status = 302
   force = true
 
