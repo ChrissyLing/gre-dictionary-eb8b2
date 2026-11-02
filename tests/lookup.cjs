@@ -22,7 +22,7 @@ function app(fetcher) {
   return {c,element,stored,requests};
 }
 const files = async url=> {
-  assert.match(url, /^data\/v4\/[a-z]\.json$/,'lookup must use bundled assets only');
+  assert.match(url, /^data\/(?:v4\/[a-z]|questions-v1)\.json$/,'lookup must use bundled assets only');
   return {ok:true,status:200,json:async()=>JSON.parse(fs.readFileSync(path.join(root,url),'utf8'))};
 };
 (async()=>{
@@ -34,7 +34,7 @@ const files = async url=> {
     assert.match(a.element('result').innerHTML,/[\u4e00-\u9fff]/,word+' has Chinese');
     if (word==='lull') { assert(a.element('result').innerHTML.includes('respite')); assert(!a.element('result').innerHTML.includes('已收录等价词和例句')); }
   }
-  assert(a.requests.every(u=>u.startsWith('data/v4/')),'no third-party request during lookup');
+  assert(a.requests.every(u=>u.startsWith('data/v4/') || u==='data/questions-v1.json'),'no third-party request during lookup');
   const count=a.requests.length;
   await a.c.doSearch('appropriate'); assert.equal(a.requests.length,count,'dictionary shards are cached');
   await a.c.doSearch('zzzzunknownword'); assert(a.element('status').innerHTML.includes('暂未收录'));
@@ -94,7 +94,7 @@ const files = async url=> {
   await b.c.doSearch('hello'); assert(b.element('status').innerHTML.includes('再次点击查询'));
   const before=b.requests.length; await b.c.doSearch('hello'); assert(b.requests.length>before,'failed assets are retried');
   let release;
-  const d=app(()=>new Promise(resolve=>{release=()=>resolve({ok:true,json:async()=>JSON.parse(fs.readFileSync(path.join(root,'data/v4/p.json'),'utf8'))})}));
+  const d=app(url=>url==='data/questions-v1.json' ? files(url) : new Promise(resolve=>{release=()=>resolve({ok:true,json:async()=>JSON.parse(fs.readFileSync(path.join(root,'data/v4/p.json'),'utf8'))})}));
   const pending=d.c.doSearch('pragmatic'); assert.equal(d.element('result').hidden,false,'core content immediately visible');
   await d.c.doSearch('123'); release(); await pending; assert(d.element('status').innerHTML.includes('请输入英文单词'),'stale response cannot overwrite current search');
   const corpus=app(async()=>{throw new Error('no dictionary assets')});
@@ -104,5 +104,45 @@ const files = async url=> {
     assert.equal(corpus.element('status').innerHTML,'',word+' does not fail when extra dictionary assets are missing');
     assert(corpus.element('result').innerHTML.includes('镇考机经词7.0'));
   }
+  const bank = await a.c.loadQuestionBank();
+  assert.equal(bank.questions.filter(q=>q.kind==='fill').length,2002);
+  assert.equal(bank.questions.filter(q=>q.kind==='read').length,440);
+  const byId = Object.fromEntries(bank.questions.map(q=>[q.id,q]));
+  assert.equal(Object.keys(byId).length,2442,'source question IDs are unique');
+  for(const q of bank.questions.filter(q=>q.kind==='fill')) {
+    assert([5,6,9].includes(q.options.length),q.id+' choices complete');
+    assert.equal(new Set(q.options.map(o=>o.label)).size,q.options.length,q.id+' unique choices');
+    assert(q.stem.length>20,q.id+' has a stem');
+  }
+  assert.equal(byId['f-1-1-2'].options.find(o=>o.label==='A').text,'dearth','floating PDF table choices attach to the correct question');
+  assert.equal(byId['f-1-1-3'].options.find(o=>o.label==='A').text,'effect');
+  assert.equal(byId['f-1-1-6'].options.find(o=>o.label==='F').text,'hyperbole','cross-page choices retained');
+  assert.deepEqual(Array.from(byId['f-1-1-6'].pages),[14,15]);
+  assert.equal(byId['f-64-2-1'].options[0].text,'self-evident','option embedded after stem is recognized');
+  assert(byId['f-69-2-3'].stem.includes('E.O. Wilson'),'person initials stay in the stem');
+  assert(byId['f-119-2-4'].stem.includes('vitamin C.'),'vitamin C is not an option');
+  assert(byId['f-126-2-7'].stem.includes('A. Elizabeth Arnold'));
+  assert(a.c.questionItemHtml(byId['r-9'],'boycott',bank.aliases).match(/<strong>Breen\s+did acknowledge/),'original emphasis is preserved');
+  assert(byId['r-124'].bold.length && byId['r-294'].bold.length);
+  assert(a.c.findRelatedQuestions(bank,'insular').fill.some(q=>q.id==='f-1-1-1'));
+  assert(a.c.findRelatedQuestions(bank,'guppy').read.some(q=>q.id==='r-1'),'inflected occurrences match base forms');
+  assert(a.c.findRelatedQuestions(bank,'gup').read.length===0,'substring matches are excluded');
+  assert(a.c.findRelatedQuestions(bank,'constructor'),'prototype named lookup stays safe');
+  assert(!a.c.highlightQuestion('inappropriate appropriate','appropriate',bank.aliases).includes('<mark>inappropriate'));
+  await a.c.doSearch('appropriate');
+  await a.c.loadRelatedQuestions('appropriate',vm.runInContext('reqSeq',a.c));
+  assert(a.element('relatedQuestionBody').innerHTML.includes('Test 119'));
+  assert(a.element('relatedQuestionBody').innerHTML.includes('不代表正确答案'));
+  assert(a.element('result').innerHTML.indexOf('📚 相关原题')>a.element('result').innerHTML.indexOf('📝 例句'),'questions follow examples');
+  await b.c.loadRelatedQuestions('appropriate',vm.runInContext('reqSeq',b.c));
+  assert(b.element('relatedQuestionBody').innerHTML.includes('重新加载原题'),'question failures offer independent retry');
+  let releaseBank;
+  const stale=app(url=>url==='data/questions-v1.json' ? new Promise(resolve=>{releaseBank=()=>resolve({ok:true,json:async()=>bank})}) : files(url));
+  await stale.c.doSearch('appropriate');
+  await stale.c.doSearch('lull');
+  releaseBank();
+  await stale.c.loadRelatedQuestions('lull',vm.runInContext('reqSeq',stale.c));
+  assert(!stale.element('relatedQuestionBody').innerHTML.includes('Test 119 · Section 2 · 第 5 题'),'late data cannot show previous word questions');
+  assert.equal(a.requests.filter(u=>u==='data/questions-v1.json').length,1,'question bank loads once');
   console.log('PASS: bundled bilingual lookup, irregular/derived forms, SE-only words, no external lookup requests, asset caching/retry, local fallback, stale response');
 })().catch(e=>{console.error(e);process.exitCode=1});

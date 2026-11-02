@@ -185,6 +185,14 @@
     white-space: nowrap;
   }
   .se-pair-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 2px; }
+  .question-item { border-top: 1px solid #e6e6f1; padding: 13px 0; }
+  .question-item summary, .question-more > summary { cursor: pointer; font-weight: 600; line-height: 1.7; }
+  .question-item summary .source-note { display: block; font-weight: 400; padding-left: 18px; }
+  .question-stem, .question-reading { line-height: 1.85; overflow-wrap: anywhere; margin: 14px 0; }
+  .question-reading { white-space: pre-wrap; }
+  .question-options p { margin: 7px 0; line-height: 1.7; overflow-wrap: anywhere; }
+  .question-group { margin: 22px 0 10px; }
+  .question-more { margin-top: 12px; }
 </style>
 </head>
 <body>
@@ -228,7 +236,7 @@
   </section>
 
   <footer>
-    <span id="appVersion">版本 2026.11.02.2 · 站内英汉词库</span><br>
+    <span id="appVersion">版本 2026.11.02.3 · 站内英汉词库</span><br>
     基础词典：<a href="https://github.com/skywind3000/ECDICT" target="_blank" rel="noopener">ECDICT</a> · 释义和音标随本站提供 · 例句翻译按需联网<br>
     GRE 资料：急救1400词 · 青山答案词 · 多源六选二等价词 · 真经等价词汇总 · 镇考机经词7.0 · 阅读机经核心词汇；各资料及例句分别标注 · 仅供个人学习使用
   </footer>
@@ -433,6 +441,104 @@ function equivalentChip(word) {
   return `<button class="se-chip" data-word="${esc(word)}">${esc(word)}<span class="se-frequency" title="${esc(detail)}">${label}</span></button>`;
 }
 
+/* 原题单独从本站加载；失败不会影响释义、例句和生词本。 */
+let questionBankPromise = null;
+const questionResults = new Map();
+function questionRoot(aliases, word) {
+  return Object.prototype.hasOwnProperty.call(aliases, word) ? aliases[word] : word;
+}
+function questionText(q) {
+  return q.kind === 'fill' ? q.stem + ' ' + q.options.map(o => o.text).join(' ') : q.text;
+}
+function questionTokens(text) {
+  return normalizeStudyWord(text).match(/[a-z]+(?:['-][a-z]+)*/g) || [];
+}
+function loadQuestionBank() {
+  if (!questionBankPromise) {
+    const request = window.LOCAL_QUESTIONS ? Promise.resolve({ok: true, json: async () => window.LOCAL_QUESTIONS}) : fetchTimeout('data/questions-v1.json', 20000);
+    questionBankPromise = request.then(async res => {
+      if (!res.ok) throw new Error('Question asset HTTP ' + res.status);
+      const bank = await res.json();
+      if (bank.version !== 1 || !Array.isArray(bank.questions) || !bank.aliases) throw new Error('Invalid question bank');
+      bank.index = new Map();
+      bank.questions.forEach(q => {
+        const terms = new Set(questionTokens(questionText(q)).flatMap(t => [t, questionRoot(bank.aliases, t)]));
+        terms.forEach(t => {
+          if (!bank.index.has(t)) bank.index.set(t, []);
+          bank.index.get(t).push(q);
+        });
+      });
+      return bank;
+    }).catch(error => { questionBankPromise = null; throw error; });
+  }
+  return questionBankPromise;
+}
+function findRelatedQuestions(bank, word) {
+  const key = normalizeStudyWord(word);
+  if (questionResults.has(key)) return questionResults.get(key);
+  const root = questionRoot(bank.aliases, key);
+  let matches;
+  if (/\s/.test(root)) {
+    const pattern = new RegExp('(^|[^a-z])' + root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+') + '(?=$|[^a-z])', 'i');
+    matches = bank.questions.filter(q => pattern.test(questionText(q)));
+  } else matches = [...new Set([...(bank.index.get(key) || []), ...(bank.index.get(root) || [])])];
+  const result = {fill: matches.filter(q => q.kind === 'fill'), read: matches.filter(q => q.kind === 'read')};
+  questionResults.set(key, result);
+  return result;
+}
+function highlightQuestion(text, word, aliases) {
+  const root = questionRoot(aliases, word);
+  if (/\s/.test(root)) {
+    const pattern = new RegExp('(^|[^a-z])(' + root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+') + ')(?=$|[^a-z])', 'gi');
+    return esc(text).replace(pattern, (_, before, hit) => before + '<mark>' + hit + '</mark>');
+  }
+  return String(text).split(/([A-Za-z]+(?:['’\-][A-Za-z]+)*)/g).map(part => {
+    const token = normalizeStudyWord(part);
+    return (token === word || token === root || questionRoot(aliases, token) === root) ? '<mark>' + esc(part) + '</mark>' : esc(part);
+  }).join('');
+}
+function readingQuestionHtml(q, mark) {
+  const spans = (q.bold || []).map(text => ({text, at: q.text.indexOf(text)})).filter(s => s.at >= 0).sort((a, b) => a.at - b.at);
+  let cursor = 0, out = '';
+  for (const span of spans) {
+    if (span.at < cursor) continue;
+    out += mark(q.text.slice(cursor, span.at)) + '<strong>' + mark(span.text) + '</strong>';
+    cursor = span.at + span.text.length;
+  }
+  return out + mark(q.text.slice(cursor));
+}
+function questionItemHtml(q, word, aliases) {
+  const title = q.kind === 'fill' ? `Test ${q.test} · Section ${q.section} · 第 ${q.question} 题 (${q.difficulty})` : `Passage ${q.passage} · 原文与题目`;
+  const source = q.kind === 'fill' ? '张巍GRE填空机经2000题' : '张巍GRE阅读机经440篇';
+  const pages = q.pages.join('、');
+  const mark = text => highlightQuestion(text, word, aliases);
+  const multiBlank = q.kind === 'fill' && /\(i\)/.test(q.stem);
+  const content = q.kind === 'fill' ? `<p class="question-stem">${mark(q.stem)}</p>
+    ${multiBlank ? '<p class="source-note">空格 (i)：A–C；(ii)：D–F' + (q.options.length === 9 ? '；(iii)：G–I' : '') + '</p>' : ''}
+    <div class="question-options">${q.options.map(o => `<p><b>${esc(o.label)}.</b> ${mark(o.text)}</p>`).join('')}</div>` : `<div class="question-reading">${readingQuestionHtml(q, mark)}</div>`;
+  return `<details class="question-item"><summary>${esc(title)}<span class="source-note">PDF 第 ${pages} 页</span></summary>
+    ${content}<p class="source-note">《${source}》· PDF 第 ${pages} 页。高亮仅表示本词或其词形出现，不代表正确答案。</p></details>`;
+}
+function questionGroupHtml(list, kind, word, aliases) {
+  if (!list.length) return '';
+  const first = list.slice(0, 6).map(q => questionItemHtml(q, word, aliases)).join('');
+  const more = list.length > 6 ? `<details class="question-more"><summary>展开其余 ${list.length - 6} ${kind === '填空原题' ? '题' : '篇'}</summary>${list.slice(6).map(q => questionItemHtml(q, word, aliases)).join('')}</details>` : '';
+  return `<h4 class="question-group">${kind} · ${list.length} ${kind === '填空原题' ? '题' : '篇'}</h4>${first}${more}`;
+}
+async function loadRelatedQuestions(word, seq) {
+  const host = document.getElementById('relatedQuestionBody');
+  if (!host) return;
+  try {
+    const bank = await loadQuestionBank();
+    if (seq !== reqSeq || host !== document.getElementById('relatedQuestionBody')) return;
+    const result = findRelatedQuestions(bank, word);
+    host.innerHTML = questionGroupHtml(result.fill, '填空原题', word, bank.aliases) + questionGroupHtml(result.read, '阅读原文与题目', word, bank.aliases) || '<p class="empty-note">这两份题集中暂未匹配到本词。可以尝试原形或近义词。</p>';
+  } catch (error) {
+    if (seq !== reqSeq || host !== document.getElementById('relatedQuestionBody')) return;
+    host.innerHTML = '<p class="source-note">原题资料暂未加载，已有释义和例句仍可使用。</p><button class="text-btn" type="button" data-retry-questions="' + esc(word) + '">重新加载原题</button>';
+  }
+}
+
 function renderResult(p, local, se, qs, reading, town) {
   current = p;
   const groups = new Map();
@@ -590,6 +696,11 @@ function renderResult(p, local, se, qs, reading, town) {
     ${townCard}
     ${enCard}
     ${exCard}
+    <section class="card" id="relatedQuestions">
+      <h3 class="card-title">📚 相关原题</h3>
+      <p class="source-note">来自填空2000题、阅读440篇。点击题号展开；阅读保留原文与题目。粗体保留原书强调，黄色高亮为当前词。原文件未附答案。</p>
+      <div id="relatedQuestionBody"><p class="source-note">正在匹配站内原题资料…</p></div>
+    </section>
 
     ${(synCard || antCard) ? `<div class="two-col">${synCard}${antCard}</div>` : ''}
   `;
@@ -597,6 +708,7 @@ function renderResult(p, local, se, qs, reading, town) {
   updateStarBtn();
   syncFavZh(p.headword, local ? local.d.s.map(s => s.zh).join('；') : p.zh || '');
 
+  loadRelatedQuestions(p.headword, reqSeq);
   document.getElementById('audioBtn').addEventListener('click', playAudio);
   document.getElementById('starBtn').addEventListener('click', toggleStar);
 }
@@ -781,6 +893,8 @@ document.addEventListener('keydown', e => {
 
 /* 所有词块（历史 / 推荐 / 生词本 / 近义词）统一代理点击查询 */
 document.addEventListener('click', e => {
+  const retryQuestions = e.target.closest('[data-retry-questions]');
+  if (retryQuestions) { loadRelatedQuestions(retryQuestions.dataset.retryQuestions, reqSeq); return; }
   const translator = e.target.closest('[data-translate-example]');
   if (translator) { translateExample(translator); return; }
   const chip = e.target.closest('[data-word]');
