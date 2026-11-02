@@ -41,6 +41,25 @@ const files = async url=> {
   await a.c.doSearch('constructor'); assert(a.element('status').innerHTML!==undefined,'prototype-named input is safe');
   await a.c.doSearch('123'); assert(a.element('status').innerHTML.includes('请输入英文单词'));
   const b=app(async()=>{throw new Error('asset unavailable')});
+  assert.equal(Object.keys(b.c.JJ_TOWN).length,1449);
+  assert.equal(Object.values(b.c.JJ_TOWN).reduce((sum,r)=>sum+r.examples.length,0),1408);
+  const extra=b.c.seLookup('mitigate').list.find(e=>e.eq==='abate'&&e.sourceBook==='真经GRE等价词汇总');
+  assert(extra&&extra.page===5,'new equivalences preserve source PDF pages');
+  assert(b.c.seLookup('abate').list.some(e=>e.eq==='mitigate'&&e.sourceBook==='真经GRE等价词汇总'),'new equivalences work in reverse');
+  assert(b.c.seLookup('nimble').list.some(e=>e.eq==='adroit'));
+  assert(b.c.seLookup('nimble').list.some(e=>e.eq==='dexterous'));
+  assert(!b.c.seLookup('nimble').list.some(e=>e.eq==='adroit dexterous'),'source punctuation is correctly separated');
+  await b.c.doSearch('abandon');
+  assert(b.element('result').innerHTML.includes('机经词书例句'));
+  assert(b.element('result').innerHTML.includes('The agency was responding'));
+  assert(b.element('result').innerHTML.includes('PDF 第 5 页'));
+  await b.c.doSearch('abstract');
+  assert(b.element('result').innerHTML.includes('The show suggests'),'cross-page examples remain attached to the preceding headword');
+  await b.c.doSearch('naiveté');
+  assert.equal(b.element('status').innerHTML,'','accented source headwords are searchable');
+  assert(b.element('result').innerHTML.includes('Get Out'));
+  assert(b.element('result').innerHTML.includes('天真'));
+  assert(!b.element('result').innerHTML.includes('这个词暂未收录例句'));
   assert.equal(b.c.frequency1400('appropriate').count,b.c.W1400.appropriate.f,'equivalence frequencies use the supplied 1400 counts');
   assert.equal(b.c.frequency1400('zzzznotin1400'),null);
   assert(b.c.equivalentChip('appropriate').includes('1400：'+b.c.W1400.appropriate.f+'次'));
@@ -78,5 +97,12 @@ const files = async url=> {
   const d=app(()=>new Promise(resolve=>{release=()=>resolve({ok:true,json:async()=>JSON.parse(fs.readFileSync(path.join(root,'data/v4/p.json'),'utf8'))})}));
   const pending=d.c.doSearch('pragmatic'); assert.equal(d.element('result').hidden,false,'core content immediately visible');
   await d.c.doSearch('123'); release(); await pending; assert(d.element('status').innerHTML.includes('请输入英文单词'),'stale response cannot overwrite current search');
+  const corpus=app(async()=>{throw new Error('no dictionary assets')});
+  for(const word of Object.keys(corpus.c.JJ_TOWN)) {
+    await corpus.c.doSearch(word);
+    assert.equal(corpus.element('result').hidden,false,word+' town entry renders without external dependencies');
+    assert.equal(corpus.element('status').innerHTML,'',word+' does not fail when extra dictionary assets are missing');
+    assert(corpus.element('result').innerHTML.includes('镇考机经词7.0'));
+  }
   console.log('PASS: bundled bilingual lookup, irregular/derived forms, SE-only words, no external lookup requests, asset caching/retry, local fallback, stale response');
 })().catch(e=>{console.error(e);process.exitCode=1});
