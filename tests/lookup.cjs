@@ -144,5 +144,17 @@ const files = async url=> {
   await stale.c.loadRelatedQuestions('lull',vm.runInContext('reqSeq',stale.c));
   assert(!stale.element('relatedQuestionBody').innerHTML.includes('Test 119 · Section 2 · 第 5 题'),'late data cannot show previous word questions');
   assert.equal(a.requests.filter(u=>u==='data/questions-v1.json').length,1,'question bank loads once');
+  assert.equal(a.c.frequencyZw('appropriate'),3);
+  assert.equal(a.c.frequencyZw('lull'),3);
+  assert.equal(a.c.frequencyZw('pragmatic'),6);
+  assert.equal(a.c.frequencyZw('zzzznotaword'),null,'missing count is not zero');
+  assert.equal(a.c.frequencyZw('constructor'),null,'prototype keys are safe');
+  assert(a.c.equivalentChip('pragmatic').includes('zw 六选二：6题'));
+  assert(a.c.equivalentChip('appropriate').includes('1400：'),'1400 frequency is retained separately');
+  assert(!a.c.zwFrequencyLabel('zzzznotaword'),'unknown frequency stays unlabelled');
+  await a.c.doSearch('pragmatic');
+  assert(a.element('result').innerHTML.includes('zw 六选二 · 出现 6 题'));
+  assert(a.element('result').innerHTML.includes('>zw</span>'),'three added sources share zw badge');
+  assert(a.element('result').innerHTML.includes('不代表正确答案次数'),'counting scope is explicit');
   console.log('PASS: bundled bilingual lookup, irregular/derived forms, SE-only words, no external lookup requests, asset caching/retry, local fallback, stale response');
 })().catch(e=>{console.error(e);process.exitCode=1});
