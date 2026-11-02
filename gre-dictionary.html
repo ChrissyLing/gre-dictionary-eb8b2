@@ -193,6 +193,13 @@
   .question-options p { margin: 7px 0; line-height: 1.7; overflow-wrap: anywhere; }
   .question-group { margin: 22px 0 10px; }
   .question-more { margin-top: 12px; }
+  .sense-sources { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+  .sense-source { font-size: 10px; font-weight: 400; color: #7b819a; background: #f3f4fa; border-radius: 5px; padding: 1px 6px; }
+  .merged-sense { padding: 9px 0; }
+  .sense-originals summary, .dictionary-details > summary { cursor: pointer; }
+  .sense-originals p { line-height: 1.7; margin-top: 7px; }
+  .dictionary-details > summary { font-size: 14px; font-weight: 600; color: #6366f1; }
+  .dictionary-details[open] > summary { margin-bottom: 14px; }
 </style>
 </head>
 <body>
@@ -236,7 +243,7 @@
   </section>
 
   <footer>
-    <span id="appVersion">版本 2026.11.02.6 · 站内英汉词库</span><br>
+    <span id="appVersion">版本 2026.11.02.7 · 站内英汉词库</span><br>
     基础词典：<a href="https://github.com/skywind3000/ECDICT" target="_blank" rel="noopener">ECDICT</a> · 释义和音标随本站提供 · 例句翻译按需联网<br>
     GRE 资料：急救1400词 · 青山答案词 · 多源六选二等价词 · 真经等价词汇总 · 镇考机经词7.0 · 阅读机经核心词汇；各资料及例句分别标注 · 仅供个人学习使用
   </footer>
@@ -567,8 +574,79 @@ async function loadRelatedQuestions(word, seq) {
   }
 }
 
+/* 合并展示，原始资料记录保留在可展开的来源中。 */
+function sensePos(pos) {
+  const p = String(pos || '').trim().toLowerCase();
+  if (/^(?:v\.|vt\.|vi\.|verb)/.test(p)) return 'v.';
+  if (/^(?:adj\.|a\.)/.test(p)) return 'adj.';
+  if (/^(?:adv\.|ad\.)/.test(p)) return 'adv.';
+  if (/^(?:n\.|noun)/.test(p)) return 'n.';
+  return p;
+}
+function senseKey(text) {
+  return String(text || '').normalize('NFKC').toLowerCase().replace(/[\s，,、；;。.!！?？:：]/g, '');
+}
+function senseTerms(text, word) {
+  return String(text || '').split(/[，,、；;]/).map(t => {
+    const key = senseKey(t);
+    // avert 在这些资料中是同一“防止发生”义项；不将此归并扩展到其他单词。
+    return word === 'avert' && ['防止','避免','阻止'].includes(key) ? '防止发生' : key;
+  }).filter(Boolean);
+}
+function mergeStudySenses(word, local, qs, reading, town) {
+  const records = [];
+  const add = (sourceId, source, senses) => senses.forEach(s => records.push({sourceId, source, pos: s.pos || '', zh: s.zh || '', en: s.en || '', page: s.page, note: s.note || ''}));
+  if (local) add('1400', '急救1400词 · 考纲释义', local.d.s);
+  if (qs) add('qs', '青山答案词释义', qs.d.s);
+  if (town) add('town', 'zw 镇考机经词7.0', town.d.senses);
+  if (reading) add('reading', 'zw 阅读机经核心词汇', reading.d.s);
+  const result = [];
+  const enKey = en => senseKey(en.replace(/^to\s+/i, ''));
+  for (const record of records) {
+    const pos = sensePos(record.pos), zh = senseKey(record.zh), en = enKey(record.en);
+    const candidates = result.map(group => {
+      if (group.records.some(r => sensePos(r.pos) && pos && sensePos(r.pos) !== pos)) return {group, score: 0};
+      let score = 0;
+      for (const old of group.records) {
+        const oldZh = senseKey(old.zh), oldEn = enKey(old.en);
+        if (record.sourceId === old.sourceId && !(zh === oldZh && en === oldEn)) continue;
+        if (en && oldEn === en) score = Math.max(score, 3);
+        else if (zh && oldZh === zh) score = Math.max(score, 2);
+        else if ((!en || !oldEn) && senseTerms(record.zh, word).some(t => senseTerms(old.zh, word).includes(t))) score = Math.max(score, 1);
+      }
+      return {group, score};
+    }).filter(c => c.score > 0).sort((a, b) => b.score - a.score);
+    // 一个释义同时对应几个不同义项时保持独立，避免含糊词义把两行连在一起。
+    if (candidates.length && (candidates.length === 1 || candidates[0].score > candidates[1].score)) candidates[0].group.records.push(record);
+    else result.push({records: [record]});
+  }
+  return result.map(group => {
+    const zhParts = [], seen = new Set();
+    group.records.forEach(r => String(r.zh).split(/[，,、；;]/).forEach(t => { t = t.trim(); const key = senseKey(t); if (key && !seen.has(key)) { seen.add(key); zhParts.push(t); } }));
+    const ens = [], seenEn = new Set();
+    group.records.forEach(r => { const key = enKey(r.en); if (key && !seenEn.has(key)) { seenEn.add(key); ens.push(r.en); } });
+    return {...group, pos: group.records.map(r => r.pos).find(Boolean) || '', zh: zhParts.join('、') || '原书未列中文释义', ens};
+  });
+}
+function mergedStudyCard(senses, local) {
+  if (!senses.length) return '';
+  const rows = senses.map(s => {
+    const sources = [...new Map(s.records.map(r => [r.sourceId, r.source])).values()];
+    return `<div class="kaofa merged-sense"><div class="kf-head"><span class="kf-pos">${esc(s.pos)}</span><span class="kf-zh">${esc(s.zh)}</span>
+      <span class="sense-sources">${sources.map(source => `<span class="sense-source">${esc(source)}</span>`).join('')}</span></div>
+      ${s.ens.length ? `<p class="kf-en">${s.ens.map(esc).join('；')}</p>` : ''}</div>`;
+  }).join('');
+  const originals = senses.flatMap(s => s.records).map(r => `<p><b>${esc(r.source)}</b>${r.page ? ` · PDF 第 ${r.page} 页` : ''}：${esc(r.pos)} ${esc(r.zh || '原书未列中文释义')}${r.en ? ` · ${esc(r.en)}` : ''}${r.note ? ` · 拓展：${esc(r.note)}` : ''}</p>`).join('');
+  return `<section class="card"><h3 class="card-title">📖 释义</h3>${rows}
+    ${local && local.d.mn ? `<div class="mnemonic">💡 助记：${esc(local.d.mn)}</div>` : ''}
+    ${local && local.d.rel ? `<div class="related">📎 相关词：${esc(local.d.rel)}</div>` : ''}
+    <details class="source-note sense-originals"><summary>查看各资料原文与来源</summary>${originals}</details></section>`;
+}
+
 function renderResult(p, local, se, qs, reading, town) {
   current = p;
+  const studySenses = mergeStudySenses(p.headword, local, qs, reading, town);
+  const studyCard = mergedStudyCard(studySenses, local);
   const groups = new Map();
   p.defs.forEach(d => {
     if (!groups.has(d.pos)) groups.set(d.pos, []);
@@ -585,11 +663,7 @@ function renderResult(p, local, se, qs, reading, town) {
         </div>`).join('')}
     </div>`).join('') : '';
 
-  const enCard = defsHtml ? `
-    <section class="card">
-      <h3 class="card-title">📖 英文词典释义</h3>
-      ${defsHtml}
-    </section>` : '';
+  const enCard = defsHtml ? (studySenses.length ? `<details class="card dictionary-details"><summary>📖 英文词典释义</summary>${defsHtml}</details>` : `<section class="card"><h3 class="card-title">📖 英文词典释义</h3>${defsHtml}</section>`) : '';
 
   const kmf = se ? kmfLookup(se.key) : null;
   const originalFrequencies = kmf ? Object.entries(originalPairFrequencies(kmf.key)) : [];
@@ -602,40 +676,8 @@ function renderResult(p, local, se, qs, reading, town) {
   if (frequencyZw(p.headword)) badges.push(`<span class="badge se" title="zw 填空题集中六选二题干或选项出现的题数，同题计一次，不代表答案次数">zw 六选二 · 出现 ${frequencyZw(p.headword)} 题</span>`);
   if (kmf) badges.push(`<span class="badge se">kmf 六选二${originalFrequencies.length === 1 ? ` · 原表词对考频${originalFrequencies[0][1]}次` : ''}</span>`);
 
-  const greCard = local ? `
-    <section class="card">
-      <h3 class="card-title">📕 考纲释义 · 急救1400词（一词多义）</h3>
-      ${local.d.s.map((s, i) => `
-        <div class="kaofa">
-          <div class="kf-head">
-            <span class="kf-no">考法${i + 1}</span>
-            <span class="kf-pos">${esc(s.pos)}</span>
-            <span class="kf-zh">${esc(s.zh)}</span>
-          </div>
-          ${s.en ? `<p class="kf-en">${esc(s.en)}</p>` : ''}
-        </div>`).join('')}
-      ${local.d.mn ? `<div class="mnemonic">💡 助记：${esc(local.d.mn)}</div>` : ''}
-      ${local.d.rel ? `<div class="related">📎 相关词：${esc(local.d.rel)}</div>` : ''}
-    </section>` : '';
-
-  const qsCard = qs ? `
-    <section class="card">
-      <h3 class="card-title">📗 青山答案词释义</h3>
-      ${qs.d.s.map(s => `
-        <div class="kaofa"><div class="kf-head">
-          <span class="kf-pos">${esc(s.pos)}</span>
-          <span class="kf-zh">${esc(s.zh)}</span>
-        </div></div>`).join('')}
-    </section>` : '';
-
-  const readingCard = reading ? `
-    <section class="card">
-      <h3 class="card-title">📘 zw 阅读机经核心词汇</h3>
-      ${reading.d.s.map(s => `<div class="kaofa">
-        <p class="kf-zh">${esc(s.zh)}</p>
-        ${s.note ? `<p class="related">拓展：${esc(s.note)}</p>` : ''}
-        <p class="source-note">zw 阅读机经核心词汇 · PDF 第 ${s.page} 页</p>
-      </div>`).join('')}
+  const readingCard = reading && reading.d.contexts.length ? `
+    <section class="card"><h3 class="card-title">📘 zw 阅读机经核心词汇 · 题目语境</h3>
       ${reading.d.contexts.map(c => `<div class="kaofa">
         <p>本义：${esc(c.base)}</p>
         <p class="kf-zh">文中义：${esc(c.meaning)}</p>
@@ -644,15 +686,6 @@ function renderResult(p, local, se, qs, reading, town) {
       </div>`).join('')}
     </section>` : '';
 
-  const townCard = town ? `
-    <section class="card">
-      <h3 class="card-title">📙 zw 镇考机经词7.0 · GRE 常考义</h3>
-      ${town.d.senses.map(s => `<div class="kaofa">
-        <div class="kf-head"><span class="kf-pos">${esc(s.pos)}</span><span class="kf-zh">${esc(s.zh || '原书未列中文释义')}</span></div>
-        ${s.en ? `<p class="kf-en">${esc(s.en)}</p>` : ''}
-        <p class="source-note">zw 镇考机经词7.0 · PDF 第 ${s.page} 页（书内第 ${s.page - 4} 页）</p>
-      </div>`).join('')}
-    </section>` : '';
   const townExHtml = town ? town.d.examples.map(example => `
     <div class="example">
       <p class="ex-en"><span class="se-label">zw 镇考机经词7.0 · 机经词书例句</span>${highlight(example.en, [p.headword, town.key])}</p>
@@ -723,10 +756,8 @@ function renderResult(p, local, se, qs, reading, town) {
       <div class="word-zh" id="wordZh">${wordZhHtml}</div>
     </div>
 
-    ${greCard}
-    ${qsCard}
+    ${studyCard}
     ${readingCard}
-    ${townCard}
     ${enCard}
     ${exCard}
     <section class="card" id="relatedQuestions">
