@@ -154,7 +154,7 @@ const files = async url=> {
   assert(!a.c.zwFrequencyLabel('zzzznotaword'),'unknown frequency stays unlabelled');
   await a.c.doSearch('pragmatic');
   assert(a.element('result').innerHTML.includes('zw 六选二 · 出现 6 题'));
-  assert(a.element('result').innerHTML.includes('>zw</span>'),'three added sources share zw badge');
+  assert(a.element('result').innerHTML.includes('>zw 镇考机经词7.0</span>'),'zw badge retains the specific source name');
   assert(a.element('result').innerHTML.includes('不代表正确答案次数'),'counting scope is explicit');
   console.log('PASS: bundled bilingual lookup, irregular/derived forms, SE-only words, no external lookup requests, asset caching/retry, local fallback, stale response');
 })().catch(e=>{console.error(e);process.exitCode=1});

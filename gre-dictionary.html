@@ -236,7 +236,7 @@
   </section>
 
   <footer>
-    <span id="appVersion">版本 2026.11.02.4 · 站内英汉词库</span><br>
+    <span id="appVersion">版本 2026.11.02.5 · 站内英汉词库</span><br>
     基础词典：<a href="https://github.com/skywind3000/ECDICT" target="_blank" rel="noopener">ECDICT</a> · 释义和音标随本站提供 · 例句翻译按需联网<br>
     GRE 资料：急救1400词 · 青山答案词 · 多源六选二等价词 · 真经等价词汇总 · 镇考机经词7.0 · 阅读机经核心词汇；各资料及例句分别标注 · 仅供个人学习使用
   </footer>
@@ -575,7 +575,9 @@ function renderResult(p, local, se, qs, reading, town) {
   const badges = [];
   if (local) badges.push(`<span class="badge">GRE 急救1400词 · 考过${local.d.f}次</span>`);
   if (qs) badges.push(`<span class="badge">青山答案词</span>`);
-  if (reading || town || (se && se.list.some(e => e.sourceBook))) badges.push(`<span class="badge">zw</span>`);
+  if (reading) badges.push(`<span class="badge">zw 阅读机经核心词汇</span>`);
+  if (town || (se && se.list.some(e => e.sourceBook === 'GRE镇考机经词7.0'))) badges.push(`<span class="badge">zw 镇考机经词7.0</span>`);
+  if (se && se.list.some(e => e.sourceBook === '真经GRE等价词汇总')) badges.push(`<span class="badge">zw 等价词汇总</span>`);
   if (frequencyZw(p.headword)) badges.push(`<span class="badge se" title="zw 填空题集中六选二题干或选项出现的题数，同题计一次，不代表答案次数">zw 六选二 · 出现 ${frequencyZw(p.headword)} 题</span>`);
   if (se) badges.push(`<span class="badge se">六选二等价词</span>`);
 
@@ -607,34 +609,34 @@ function renderResult(p, local, se, qs, reading, town) {
 
   const readingCard = reading ? `
     <section class="card">
-      <h3 class="card-title">📘 zw · 阅读机经核心词汇</h3>
+      <h3 class="card-title">📘 zw 阅读机经核心词汇</h3>
       ${reading.d.s.map(s => `<div class="kaofa">
         <p class="kf-zh">${esc(s.zh)}</p>
         ${s.note ? `<p class="related">拓展：${esc(s.note)}</p>` : ''}
-        <p class="source-note">zw ·《GRE阅读机经核心词汇》第 ${s.page} 页</p>
+        <p class="source-note">zw 阅读机经核心词汇 · PDF 第 ${s.page} 页</p>
       </div>`).join('')}
       ${reading.d.contexts.map(c => `<div class="kaofa">
         <p>本义：${esc(c.base)}</p>
         <p class="kf-zh">文中义：${esc(c.meaning)}</p>
         <p>本题对应选项：${c.option.split(/\s*=\s*/).map(option => `<button class="chip" data-word="${esc(option)}">${esc(option)}</button>`).join(' ')}</p>
-        <p class="source-note">阅读机经题号 ${esc(c.question)} · 资料第 ${c.page} 页（对应关系仅限本题语境）</p>
+        <p class="source-note">zw 阅读机经核心词汇 · 题号 ${esc(c.question)} · 资料第 ${c.page} 页（对应关系仅限本题语境）</p>
       </div>`).join('')}
     </section>` : '';
 
   const townCard = town ? `
     <section class="card">
-      <h3 class="card-title">📙 zw · 镇考机经词7.0 · GRE 常考义</h3>
+      <h3 class="card-title">📙 zw 镇考机经词7.0 · GRE 常考义</h3>
       ${town.d.senses.map(s => `<div class="kaofa">
         <div class="kf-head"><span class="kf-pos">${esc(s.pos)}</span><span class="kf-zh">${esc(s.zh || '原书未列中文释义')}</span></div>
         ${s.en ? `<p class="kf-en">${esc(s.en)}</p>` : ''}
-        <p class="source-note">zw ·《GRE镇考机经词7.0》PDF 第 ${s.page} 页（书内第 ${s.page - 4} 页）</p>
+        <p class="source-note">zw 镇考机经词7.0 · PDF 第 ${s.page} 页（书内第 ${s.page - 4} 页）</p>
       </div>`).join('')}
     </section>` : '';
   const townExHtml = town ? town.d.examples.map(example => `
     <div class="example">
-      <p class="ex-en"><span class="se-label">zw · 机经词书例句</span>${highlight(example.en, [p.headword, town.key])}</p>
+      <p class="ex-en"><span class="se-label">zw 镇考机经词7.0 · 机经词书例句</span>${highlight(example.en, [p.headword, town.key])}</p>
       <p class="ex-zh"><button class="text-btn" type="button" data-translate-example="${esc(example.en)}">翻译例句</button></p>
-      <p class="source-note">zw ·《GRE镇考机经词7.0》PDF 第 ${example.page} 页 · 原书引用例句</p>
+      <p class="source-note">zw 镇考机经词7.0 · PDF 第 ${example.page} 页 · 原书引用例句</p>
     </div>`).join('') : '';
 
   // 例句：六选二真题在前（等价词对高亮），词典例句在后
@@ -663,8 +665,8 @@ function renderResult(p, local, se, qs, reading, town) {
       <div class="chips">${[...new Set(se.list.map(e => e.eq))].map(equivalentChip).join('')}</div>
     </div>` : '';
   const addedSources = se ? se.list.filter(e => e.sourceBook) : [];
-  const sourceDetails = addedSources.length ? `<details class="source-note"><summary>zw · 查看等价词的原书来源与释义</summary>
-    ${addedSources.map(e => `<p>${esc(e.eq)}${e.zh ? ` · 原书释义：${esc(e.zh)}` : ''} · zw · ${esc(e.sourceBook)} PDF 第 ${e.page} 页</p>`).join('')}
+  const sourceDetails = addedSources.length ? `<details class="source-note"><summary>查看 zw 等价词汇总 / zw 镇考机经词7.0 的来源与释义</summary>
+    ${addedSources.map(e => `<p>${esc(e.eq)}${e.zh ? ` · 原书释义：${esc(e.zh)}` : ''} · ${esc(e.sourceBook === '真经GRE等价词汇总' ? 'zw 等价词汇总' : 'zw 镇考机经词7.0')} PDF 第 ${e.page} 页</p>`).join('')}
   </details>` : '';
   const synCard = (se || p.syns.length) ? `
     <section class="card">
