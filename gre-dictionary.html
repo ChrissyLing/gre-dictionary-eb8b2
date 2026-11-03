@@ -243,7 +243,7 @@
   </section>
 
   <footer>
-    <span id="appVersion">版本 2026.11.02.7 · 站内英汉词库</span><br>
+    <span id="appVersion">版本 2026.11.03.1 · 站内英汉词库</span><br>
     基础词典：<a href="https://github.com/skywind3000/ECDICT" target="_blank" rel="noopener">ECDICT</a> · 释义和音标随本站提供 · 例句翻译按需联网<br>
     GRE 资料：急救1400词 · 青山答案词 · 多源六选二等价词 · 真经等价词汇总 · 镇考机经词7.0 · 阅读机经核心词汇；各资料及例句分别标注 · 仅供个人学习使用
   </footer>
@@ -588,11 +588,49 @@ function senseKey(text) {
 }
 function senseTerms(text, word) {
   return String(text || '').split(/[，,、；;]/).map(t => {
-    const key = senseKey(t);
+    const key = senseKey(t).replace(/的$/, '');
+    if (word === 'commensurate' && ['相称','相等','相似'].includes(key)) return '大小数量程度相称';
     // avert 在这些资料中是同一“防止发生”义项；不将此归并扩展到其他单词。
     return word === 'avert' && ['防止','避免','阻止'].includes(key) ? '防止发生' : key;
   }).filter(Boolean);
 }
+function senseConcepts(record, word) {
+  const terms = senseTerms(record.zh, word);
+  const concepts = new Set();
+  const families = [
+    ['理解困难', ['难懂','难理解','难以理解','晦涩难懂']],
+    ['难以捕捉', ['难以捕捉','难抓住','难以抓住','难于捕捉']],
+    ['回避逃避', ['回避','逃避','躲避']]
+  ];
+  for (const [concept, synonyms] of families) if (terms.some(t => synonyms.includes(t))) concepts.add(concept);
+  const en = String(record.en || '').toLowerCase();
+  if (/\b(?:hard|difficult)\s+to\s+(?:comprehend|understand|define)\b/.test(en)) concepts.add('理解困难');
+  if (/\b(?:hard|difficult)\s+to\s+(?:find\s+or\s+)?(?:capture|catch|grasp)\b/.test(en)) concepts.add('难以捕捉');
+  if (word === 'elusive') {
+    if (terms.some(t => ['回避','逃避','难以捕捉','难抓住','难以抓住'].includes(t)) || /evade grasp or pursuit/.test(en)) {
+      concepts.delete('回避逃避'); concepts.delete('难以捕捉'); concepts.add('elusive捕捉困难');
+    }
+    if (terms.includes('含糊其辞')) concepts.add('理解困难');
+  }
+  return concepts;
+}
+function compactSenseZh(records) {
+  const candidates = [], seen = new Set();
+  const canonical = token => {
+    const key = senseKey(token).replace(/的$/, '');
+    if (['难懂','难理解','难以理解','晦涩难懂'].includes(key)) return '难以理解的';
+    if (['难以捕捉','难抓住','难以抓住','难于捕捉'].includes(key)) return '难以捕捉的';
+    if (['回避','逃避','躲避'].includes(key)) return '回避、逃避';
+    return token.trim();
+  };
+  records.forEach(r => String(r.zh).split(/[，,、；;]/).forEach(token => {
+    const text = canonical(token), key = senseKey(text).replace(/的$/, '');
+    if (key && !seen.has(key)) { seen.add(key); candidates.push(text); }
+  }));
+  // 默认最多保留三个简短提示；所有写法仍完整保留在展开详情里。
+  return candidates.slice(0, 3).join('、') + (candidates.length > 3 ? '等' : '') || '原书未列中文释义';
+}
+
 function mergeStudySenses(word, local, qs, reading, town) {
   const records = [];
   const add = (sourceId, source, senses) => senses.forEach(s => records.push({sourceId, source, pos: s.pos || '', zh: s.zh || '', en: s.en || '', page: s.page, note: s.note || ''}));
@@ -604,13 +642,16 @@ function mergeStudySenses(word, local, qs, reading, town) {
   const enKey = en => senseKey(en.replace(/^to\s+/i, ''));
   for (const record of records) {
     const pos = sensePos(record.pos), zh = senseKey(record.zh), en = enKey(record.en);
+    const concepts = senseConcepts(record, word);
     const candidates = result.map(group => {
       if (group.records.some(r => sensePos(r.pos) && pos && sensePos(r.pos) !== pos)) return {group, score: 0};
       let score = 0;
       for (const old of group.records) {
         const oldZh = senseKey(old.zh), oldEn = enKey(old.en);
-        if (record.sourceId === old.sourceId && !(zh === oldZh && en === oldEn)) continue;
-        if (en && oldEn === en) score = Math.max(score, 3);
+        const semanticMatch = [...senseConcepts(old, word)].some(c => concepts.has(c));
+        if (record.sourceId === old.sourceId && !(zh === oldZh && en === oldEn) && !semanticMatch) continue;
+        if (en && oldEn === en) score = Math.max(score, 4);
+        else if (semanticMatch) score = Math.max(score, 3);
         else if (zh && oldZh === zh) score = Math.max(score, 2);
         else if ((!en || !oldEn) && senseTerms(record.zh, word).some(t => senseTerms(old.zh, word).includes(t))) score = Math.max(score, 1);
       }
@@ -621,11 +662,9 @@ function mergeStudySenses(word, local, qs, reading, town) {
     else result.push({records: [record]});
   }
   return result.map(group => {
-    const zhParts = [], seen = new Set();
-    group.records.forEach(r => String(r.zh).split(/[，,、；;]/).forEach(t => { t = t.trim(); const key = senseKey(t); if (key && !seen.has(key)) { seen.add(key); zhParts.push(t); } }));
     const ens = [], seenEn = new Set();
     group.records.forEach(r => { const key = enKey(r.en); if (key && !seenEn.has(key)) { seenEn.add(key); ens.push(r.en); } });
-    return {...group, pos: group.records.map(r => r.pos).find(Boolean) || '', zh: zhParts.join('、') || '原书未列中文释义', ens};
+    return {...group, pos: group.records.map(r => r.pos).find(Boolean) || '', zh: compactSenseZh(group.records), ens};
   });
 }
 function mergedStudyCard(senses, local) {
@@ -633,14 +672,14 @@ function mergedStudyCard(senses, local) {
   const rows = senses.map(s => {
     const sources = [...new Map(s.records.map(r => [r.sourceId, r.source])).values()];
     return `<div class="kaofa merged-sense"><div class="kf-head"><span class="kf-pos">${esc(s.pos)}</span><span class="kf-zh">${esc(s.zh)}</span>
-      <span class="sense-sources">${sources.map(source => `<span class="sense-source">${esc(source)}</span>`).join('')}</span></div>
-      ${s.ens.length ? `<p class="kf-en">${s.ens.map(esc).join('；')}</p>` : ''}</div>`;
+      <span class="sense-sources"><span class="sense-source" title="${esc(sources.join('、'))}">${sources.length}份资料</span></span></div></div>`;
   }).join('');
   const originals = senses.flatMap(s => s.records).map(r => `<p><b>${esc(r.source)}</b>${r.page ? ` · PDF 第 ${r.page} 页` : ''}：${esc(r.pos)} ${esc(r.zh || '原书未列中文释义')}${r.en ? ` · ${esc(r.en)}` : ''}${r.note ? ` · 拓展：${esc(r.note)}` : ''}</p>`).join('');
   return `<section class="card"><h3 class="card-title">📖 释义</h3>${rows}
+    <details class="source-note sense-originals" aria-label="查看各资料原文与来源"><summary>展开详情 · 英文释义、各资料原文与来源</summary>${originals}
     ${local && local.d.mn ? `<div class="mnemonic">💡 助记：${esc(local.d.mn)}</div>` : ''}
     ${local && local.d.rel ? `<div class="related">📎 相关词：${esc(local.d.rel)}</div>` : ''}
-    <details class="source-note sense-originals"><summary>查看各资料原文与来源</summary>${originals}</details></section>`;
+    </details></section>`;
 }
 
 function renderResult(p, local, se, qs, reading, town) {
