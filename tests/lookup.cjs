@@ -241,5 +241,33 @@ const files = async url=> {
   assert(chineseRace.element('result').innerHTML.includes('word-title'),'late reverse lookup cannot replace a new English search');
   assert(!chineseRace.element('result').innerHTML.includes('中文→英文 · 苹果'));
   assert(a.requests.every(url=>/^data\//.test(url)),'neither lookup direction contacts third-party APIs');
+  assert.equal(Object.keys(a.c.ZW3000).length,1291);
+  for (const word of ['elusive','abandon','commensurate','avert']) assert.equal(a.c.supplementLookup(word),null,word+' primary meanings win');
+  const all3000=JSON.parse(fs.readFileSync(path.join(root,'data/zw3000-v1.json'),'utf8'));
+  assert.equal(Object.keys(all3000.entries).length,3281);
+  assert(all3000.entries['puff up'] && !all3000.entries.puffup,'source phrases retain spaces');
+  assert.equal(all3000.entries.aback.senses[0].page,5);
+  assert.equal(all3000.entries.aback.senses[0].zh,'吃惊地');
+  assert.equal(all3000.entries.abrade.senses.length,2,'numbered source senses stay separate');
+  const supplemental=Object.keys(b.c.ZW3000).filter(w=>b.c.supplementLookup(w));
+  assert(supplemental.length>1200,'substantial new book coverage');
+  for(const word of supplemental){
+    await b.c.doSearch(word);
+    assert.equal(b.element('status').innerHTML,'',word+' supplement works without network assets');
+    assert(!b.element('result').hidden);
+    assert(b.element('result').innerHTML.includes('zw 镇考3000词 · 补充'),word+' labeled fallback');
+    assert(b.element('result').innerHTML.includes('展开详情'),word+' retains compact details');
+  }
+  const equivalenceOnly=supplemental.find(w=>b.c.seLookup(w));
+  assert(equivalenceOnly,'equivalence-only entry gets study definition fallback');
+  await b.c.doSearch(equivalenceOnly);
+  assert(b.element('result').innerHTML.includes('zw 镇考3000词 · 补充'));
+  await a.c.doSearch('aback');
+  assert(a.element('result').innerHTML.includes('Cross was a little taken'));
+  assert(a.element('result').innerHTML.includes('PDF 第 5 页'));
+  assert(a.c.chineseCandidates('吃惊地').some(r=>r.word==='aback'),'Chinese reverse search covers new fallback meanings');
+  await a.c.doSearch('elusive');
+  assert(!a.element('result').innerHTML.includes('zw 镇考3000词 · 补充'),'existing compact meanings not duplicated');
+  console.log('PASS: zw3000 fallback',supplemental.length,'queryable entries; precedence, provenance, phrases, examples, Chinese reverse lookup');
   console.log('PASS: bundled bilingual lookup, irregular/derived forms, SE-only words, no external lookup requests, asset caching/retry, local fallback, stale response');
 })().catch(e=>{console.error(e);process.exitCode=1});
