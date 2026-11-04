@@ -340,6 +340,35 @@ const files = async url=> {
   const acidMarkup=a.c.meaningSubgroupsBody(studyGroups.groups.find(g=>g.id==='acerbic'));
   assert.match(acidMarkup,/data-word="acerbic">acerbic<\/button> <span class="meaning-pair-arrow"[^>]*>↔<\/span> <button[^>]*data-word="vitriolic">vitriolic/);
   console.log('PASS: source pairs are visible with arrows, no invented pair links, all original counts unchanged');
+  const wine='The wine arrived cloudy & opaque, and the sommelier refused to pour it.';
+  const wineHtml=a.c.exampleTranslationHtml(wine);
+  assert(wineHtml.includes('送来的葡萄酒浑浊不透光'));
+  assert(wineHtml.includes('已校对译文'));
+  assert(wineHtml.includes('pour it 指倒酒'));
+  assert(!wineHtml.includes('data-translate-example'),'reviewed translation needs no external request');
+  assert(!wineHtml.includes('多云'));
+  const requestBefore=a.requests.length;
+  const reviewedParent={innerHTML:''};
+  await a.c.translateExample({dataset:{translateExample:wine},parentElement:reviewedParent,isConnected:true});
+  assert(reviewedParent.innerHTML.includes('已校对译文'));assert.equal(a.requests.length,requestBefore);
+  const sourceText=Object.values(a.c.ZW3000).find(d=>d.examples.some(e=>e.zh)).examples[0];
+  assert(a.c.exampleTranslationHtml(sourceText.en).includes('原书译文'));
+  const questionable=Object.values(a.c.EXAMPLE_TRANSLATIONS.entries).find(r=>r.kind==='source_issue');
+  assert(a.c.exampleTranslationHtml(questionable.en).includes('暂不提供译文'));
+  assert(!a.c.exampleTranslationHtml(questionable.en).includes('data-translate-example'));
+  let machineCalls=0;a.c.zhTranslate=async()=>{machineCalls++;return '未经核对的测试译文 <script>alert(1)</script>'};
+  const machineText='A unique test sentence with no checked translation.';
+  for(let i=0;i<2;i++){
+    const parent={innerHTML:''};await a.c.translateExample({dataset:{translateExample:machineText},parentElement:parent,isConnected:true});
+    assert(parent.innerHTML.includes('机器参考译文 · 未校对'));
+    assert(parent.innerHTML.includes('译文有误'));
+    assert(parent.innerHTML.includes('issues/new?'));
+    assert(parent.innerHTML.includes('&lt;script&gt;'));
+    assert(!parent.innerHTML.includes('已校对译文'));
+  }
+  assert.equal(machineCalls,1,'machine response cache avoids repeat calls but remains unverified');
+  assert.equal(Object.values(a.c.EXAMPLE_TRANSLATIONS.entries).filter(r=>r.kind==='reviewed').length,22);
+  console.log('PASS: checked/source translation priority, corrected wine context, flagged source sentences, explicitly unverified machine output, no automatic translation, escaped output and prefilled correction link');
   console.log('TOP SUMS',JSON.stringify(ranked.slice(0,6).map(g=>[g.title,a.c.meaningGroupFrequency(g)])));
   console.log('PASS: descending group/subsense/word/pair frequency ordering; inflected source pairs retain exact counts; missing last; stable ties; summed distinct source-pair frequencies without double counting');
   console.log('PASS: 80 reviewed Chinese meaning groups, 1065 traceable and queryable words, tab/filter/all view, exact pair frequencies, semantic boundaries');
