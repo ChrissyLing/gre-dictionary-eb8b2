@@ -304,26 +304,31 @@ const files = async url=> {
   const ranked=a.c.rankedMeaningGroups();
   assert.equal(ranked.length,80);
   assert.equal(new Set(ranked.map(g=>g.id)).size,80,'sorting preserves all groups');
-  assert.equal(ranked[0].id,'praise');
-  assert.equal(a.c.meaningGroupFrequency(ranked[0]),17,'encomiums/tributes source count also ranks their base headwords');
-  const praisePair=a.c.meaningRanking(ranked[0]).pairs.find(p=>p.a==='encomiums'&&p.b==='tributes');
+  const praise=ranked.find(g=>g.id==='praise');
+  const praisePair=a.c.meaningRanking(praise).pairs.find(p=>p.a==='encomiums'&&p.b==='tributes');
   assert.equal(praisePair.frequency,17);assert.equal(praisePair.canonicalA,'encomium');
   let previous=Infinity;
   for(const g of ranked){
-    const rank=a.c.meaningRanking(g);assert(rank.max<=previous);previous=rank.max;
+    const rank=a.c.meaningRanking(g);assert(rank.total<=previous);previous=rank.total;
+    const unique=new Map(rank.pairs.filter(p=>p.frequency).map(p=>[[p.a,p.b].sort().join("|"),p.frequency]));
+    assert.equal(rank.total,[...unique.values()].reduce((a,b)=>a+b,0),"group counts each unordered source pair once");
+    for(const w of a.c.meaningGroupWords(g))assert.equal(rank.scores.get(w),rank.countedPairs.filter(p=>p.canonicalA===w||p.canonicalB===w).reduce((a,p)=>a+p.frequency,0));
     for(const p of rank.pairs)if(p.frequency)assert.equal(p.frequency,a.c.SE_PAIR_FREQ[p.a][p.b]);
     const words=a.c.rankedMeaningWords(g,a.c.meaningGroupWords(g));
     let score=Infinity;for(const w of words){assert((rank.scores.get(w)||0)<=score);score=rank.scores.get(w)||0;}
     const subs=a.c.rankedMeaningSubgroups(g);let subscore=Infinity;
-    for(const sub of subs){const max=Math.max(0,...sub.words.map(w=>rank.scores.get(w)||0));assert(max<=subscore);subscore=max;}
+    for(const sub of subs){const sum=a.c.meaningSubgroupFrequency(g,sub);assert(sum<=subscore);subscore=sum;}
   }
   const acid=ranked.find(g=>g.id==='acerbic'), ar=a.c.meaningRanking(acid);
-  assert.equal(ar.scores.get('acerbic'),13,'take max of 13 and 6, never sum into 19');
-  assert.equal(ar.max,13);
-  a.c.openMeaningGroups();assert(a.element('result').innerHTML.includes('最高词对 17 次'));
-  assert(a.element('result').innerHTML.includes('不是单词总考频'));
+  assert.equal(ar.scores.get('acerbic'),19,'sum 13 and 6 for the two distinct original pairs');
+  assert.equal(ar.total,ar.countedPairs.reduce((sum,p)=>sum+p.frequency,0));
+  const fixture={subgroups:[{words:['acerbic','vitriolic']}],pairs:[{a:'acerbic',b:'vitriolic',frequency:13},{a:'vitriolic',b:'acerbic',frequency:13}]};
+  assert.equal(a.c.meaningRanking(fixture).total,13,'reverse direction must not double count the same source pair');
+  a.c.openMeaningGroups();assert(a.element('result').innerHTML.includes('词对考频合计'));
+  assert(a.element('result').innerHTML.includes('同一词对只计一次'));
   a.c.showMeaningGroups('尖刻');assert(a.element('result').innerHTML.includes('meaning-frequency'));
-  console.log('PASS: descending group/subsense/word/pair frequency ordering; inflected source pairs retain exact counts; missing last; stable ties; no summed frequencies');
+  console.log('TOP SUMS',JSON.stringify(ranked.slice(0,6).map(g=>[g.title,a.c.meaningGroupFrequency(g)])));
+  console.log('PASS: descending group/subsense/word/pair frequency ordering; inflected source pairs retain exact counts; missing last; stable ties; summed distinct source-pair frequencies without double counting');
   console.log('PASS: 80 reviewed Chinese meaning groups, 1065 traceable and queryable words, tab/filter/all view, exact pair frequencies, semantic boundaries');
   console.log('PASS: bundled bilingual lookup, irregular/derived forms, SE-only words, no external lookup requests, asset caching/retry, local fallback, stale response');
 })().catch(e=>{console.error(e);process.exitCode=1});

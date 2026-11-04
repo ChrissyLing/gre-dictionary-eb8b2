@@ -235,6 +235,20 @@
   @media (max-width:600px) { .meaning-index button { font-size:12px; padding:7px 9px; } .meaning-group > summary { font-size:17px; } .meaning-group > summary small { display:block; margin-left:0; } }
   .meaning-frequency { color:#6657c5; font-size:10px; border-left:1px solid #dcd8ef; padding-left:5px; margin-left:4px; }
   .meaning-index-frequency { display:block; color:#8b8fa5; font-size:10px; font-weight:400; margin-top:3px; }
+  .meaning-index { display:flex; flex-direction:column; flex-wrap:nowrap; gap:0; }
+  .meaning-index > button { display:flex; align-items:baseline; justify-content:space-between; gap:16px; width:100%; border:0; border-bottom:1px solid #eeedf5; border-radius:0; background:transparent; padding:11px 0; }
+  .meaning-index > button[aria-pressed="true"] { border-color:#eeedf5; background:transparent; color:#5e4fca; }
+  .meaning-index > button:hover { color:#5e4fca; }
+  .meaning-index-frequency { display:inline; margin:0; flex-shrink:0; }
+  .meaning-more .meaning-index { margin-top:4px; }
+  .meaning-words { line-height:2.15; }
+  .meaning-word-item { display:inline-block; white-space:nowrap; }
+  .meaning-word-item:not(:last-child)::after { content:" · "; color:#b0b2c0; margin:0 7px; }
+  .meaning-word { border:0; border-radius:0; background:transparent; padding:0; color:#4b5068; font:inherit; font-size:14px; cursor:pointer; }
+  .meaning-word:hover { color:#6254da; text-decoration:underline; }
+  .meaning-word:focus-visible { outline:2px solid #a499e8; outline-offset:3px; }
+  .meaning-frequency { border:0; padding:0; margin-left:5px; font-size:10px; vertical-align:super; }
+  @media(max-width:600px) { .meaning-index > button { font-size:13px; padding:12px 0; gap:10px; } .meaning-index-frequency { font-size:10px; } }
 </style>
 </head>
 <body>
@@ -285,7 +299,7 @@
   </section>
 
   <footer>
-    <span id="appVersion">版本 2026.11.04.4 · 站内英汉词库</span><br>
+    <span id="appVersion">版本 2026.11.04.5 · 站内英汉词库</span><br>
     基础词典：<a href="https://github.com/skywind3000/ECDICT" target="_blank" rel="noopener">ECDICT</a> · 释义和音标随本站提供 · 例句翻译按需联网<br>
     GRE 资料：急救1400词 · 青山答案词 · 多源六选二等价词 · 真经等价词汇总 · 镇考机经词7.0 · 阅读机经核心词汇；各资料及例句分别标注 · 仅供个人学习使用
   </footer>
@@ -943,7 +957,7 @@ function meaningRanking(group) {
   };
   const pairs = group.pairs.map(p=>({...p,canonicalA:p.a,canonicalB:p.b}));
   const seen = new Set(pairs.map(p=>[p.a,p.b].sort().join('\0')));
-  // Keep inflected source spellings and each original pair's count; never sum pairs or assign their counts to a headword total.
+  // Preserve source spellings. Count each unordered original source pair once, even when stored in both directions.
   for (const [a,others] of Object.entries(SE_PAIR_FREQ)) {
     const ca = canonical(a);if (!ca) continue;
     for (const [b,frequency] of Object.entries(others)) {
@@ -953,18 +967,26 @@ function meaningRanking(group) {
     }
   }
   pairs.sort((a,b)=>(b.frequency||0)-(a.frequency||0)||a.a.localeCompare(b.a)||a.b.localeCompare(b.b));
+  const counted = new Set();let total=0;
+  const countedPairs=[];
   for (const p of pairs) if (p.frequency) {
-    scores.set(p.canonicalA,Math.max(scores.get(p.canonicalA)||0,p.frequency));
-    scores.set(p.canonicalB,Math.max(scores.get(p.canonicalB)||0,p.frequency));
+    const key=[p.a,p.b].sort().join('\0');
+    if (counted.has(key)) continue;
+    counted.add(key);countedPairs.push(p);total+=p.frequency;
+    scores.set(p.canonicalA,(scores.get(p.canonicalA)||0)+p.frequency);
+    scores.set(p.canonicalB,(scores.get(p.canonicalB)||0)+p.frequency);
   }
-  const ranking={pairs,scores,max:Math.max(0,...scores.values())};meaningRankingCache.set(group,ranking);return ranking;
+  const ranking={pairs,scores,total,countedPairs};meaningRankingCache.set(group,ranking);return ranking;
 }
-function meaningGroupFrequency(group) { return meaningRanking(group).max; }
+function meaningGroupFrequency(group) { return meaningRanking(group).total; }
 function rankedMeaningGroups() { return [...MEANING_GROUPS.groups].sort((a,b)=>meaningGroupFrequency(b)-meaningGroupFrequency(a)); }
 function rankedMeaningWords(group, words) { const scores=meaningRanking(group).scores;return [...words].sort((a,b)=>(scores.get(b)||0)-(scores.get(a)||0)); }
-function rankedMeaningSubgroups(group) { const scores=meaningRanking(group).scores;const max=sub=>Math.max(0,...sub.words.map(w=>scores.get(w)||0));return [...group.subgroups].sort((a,b)=>max(b)-max(a)); }
-function meaningFrequencyLabel(group) { const max=meaningGroupFrequency(group);return max ? `最高词对 ${max} 次` : '暂无考频'; }
-
+function meaningSubgroupFrequency(group, sub) {
+  const words=new Set(sub.words);
+  return meaningRanking(group).countedPairs.filter(p=>words.has(p.canonicalA)||words.has(p.canonicalB)).reduce((sum,p)=>sum+p.frequency,0);
+}
+function rankedMeaningSubgroups(group) { return [...group.subgroups].sort((a,b)=>meaningSubgroupFrequency(group,b)-meaningSubgroupFrequency(group,a)); }
+function meaningFrequencyLabel(group) { const total=meaningGroupFrequency(group);return total ? `词对考频合计 ${total} 次` : '暂无考频'; }
 function meaningGroupMatches(group, query) {
   const key = normalizeStudyWord(query).replace(/\s+/g,' ').trim();
   if (!key) return true;
@@ -974,8 +996,8 @@ function meaningGroupMatches(group, query) {
 function meaningGroupCard(group, open) {
   const ranking=meaningRanking(group);
   const words = rankedMeaningWords(group,meaningGroupWords(group));
-  const body = rankedMeaningSubgroups(group).map(sub=>`<section class="meaning-subgroup"><h4><span>${esc(sub.pos)}</span> ${esc(sub.title)}</h4><div class="chips">${rankedMeaningWords(group,sub.words).map(word=>`<button type="button" class="chip" data-word="${esc(word)}" title="${ranking.scores.get(word) ? `本词群中涉及该词的原表单个词对最高考频：${ranking.scores.get(word)} 次；` : '暂无原表词对考频；'}点击查看完整词条">${esc(word)}${ranking.scores.get(word) ? ` <small class="meaning-frequency">${ranking.scores.get(word)}</small>` : ''}</button>`).join('')}</div></section>`).join('');
-  const pairs = ranking.pairs.length ? `<details class="meaning-evidence"><summary>原表词对与考频 · ${ranking.pairs.length} 对</summary><p class="source-note">只展示资料直接列出的词对；考频沿用原表，不累加成单词或词群总次数。未标次数表示原表没有对应考频记录。</p>${ranking.pairs.map(pair=>`<p class="meaning-pair"><button type="button" class="text-btn" data-word="${esc(pair.a)}">${esc(pair.a)}</button> ↔ <button type="button" class="text-btn" data-word="${esc(pair.b)}">${esc(pair.b)}</button>${pair.frequency ? ` <b>原表词对考频 ${pair.frequency} 次</b>` : ''}<small>${esc(pair.sources.join('；'))}</small></p>`).join('')}</details>` : '';
+  const body = rankedMeaningSubgroups(group).map(sub=>`<section class="meaning-subgroup"><h4><span>${esc(sub.pos)}</span> ${esc(sub.title)}</h4><div class="meaning-words">${rankedMeaningWords(group,sub.words).map(word=>`<span class="meaning-word-item"><button type="button" class="meaning-word" data-word="${esc(word)}" title="${ranking.scores.get(word) ? `本词群中涉及该词的去重原表词对考频合计：${ranking.scores.get(word)} 次；` : '暂无原表词对考频；'}点击查看完整词条">${esc(word)}${ranking.scores.get(word) ? ` <small class="meaning-frequency">${ranking.scores.get(word)}</small>` : ''}</button></span>`).join('')}</div></section>`).join('');
+  const pairs = ranking.pairs.length ? `<details class="meaning-evidence"><summary>原表词对与考频 · ${ranking.pairs.length} 对</summary><p class="source-note">只展示资料直接列出的词对；每对保留原表考频；目录使用不同词对考频的加和，相同词对及正反方向只计一次。该加和不是去重后的真题题数。未标次数表示原表没有对应考频记录。</p>${ranking.pairs.map(pair=>`<p class="meaning-pair"><button type="button" class="text-btn" data-word="${esc(pair.a)}">${esc(pair.a)}</button> ↔ <button type="button" class="text-btn" data-word="${esc(pair.b)}">${esc(pair.b)}</button>${pair.frequency ? ` <b>原表词对考频 ${pair.frequency} 次</b>` : ''}<small>${esc(pair.sources.join('；'))}</small></p>`).join('')}</details>` : '';
   const evidence = `<details class="meaning-evidence"><summary>展开词义与来源 · ${words.length} 词</summary><p class="source-note">以下保留各词的资料释义，可能包含该词的其他义项；本页分组只对应上面注明的含义。</p>${words.map(word=>`<div class="meaning-word-source"><b>${esc(word)}</b>${MEANING_GROUPS.words[word].records.map(r=>`<p>${esc(r.source)}${r.page ? ` · PDF 第 ${r.page} 页` : ''}：${esc(r.pos || '')} ${esc(r.zh)}${r.en ? ` · ${esc(r.en)}` : ''}</p>`).join('')}</div>`).join('')}</details>`;
   return `<details class="card meaning-group" ${open?'open':''}><summary><span>${esc(group.title)}</span><small>${words.length} 词 · ${group.subgroups.length} 个义项 · ${meaningFrequencyLabel(group)}</small></summary><p class="meaning-note">${esc(group.note)}</p>${body}${pairs}${evidence}</details>`;
 }
@@ -987,7 +1009,7 @@ function showMeaningGroups(query = '', selected = '') {
   const shown = active ? [active] : matches;
   const wordCount = Object.keys(MEANING_GROUPS.words).length;
   els.empty.hidden=true;els.status.innerHTML='';els.result.hidden=false;
-  els.result.innerHTML = `<section class="card meaning-overview"><h3 class="card-title">常见中文义项 · 等价词整理</h3><p>${groups.length} 类义项 · ${wordCount} 个英文词。按原表词对考频从高到低排列。</p><p class="source-note">目录和义项按最高词对考频排序；词后数字表示该词在本词群中涉及的单个词对最高考频，不是单词总考频。无考频记录的排后，同分保留原顺序。相近中文义仍需结合语境。</p><nav class="meaning-index" aria-label="选择中文义项"><button type="button" data-meaning-group="all" aria-pressed="${!active}">全部义项</button>${groups.slice(0,9).map(g=>`<button type="button" data-meaning-group="${esc(g.id)}" aria-pressed="${!!active&&g.id===active.id}">${esc(g.title)}<small class="meaning-index-frequency">${meaningFrequencyLabel(g)}</small></button>`).join('')}<details class="meaning-more" ${active && !groups.slice(0,9).includes(active) ? 'open' : ''}><summary>更多义项 · ${groups.length-9} 类</summary><nav class="meaning-index">${groups.slice(9).map(g=>`<button type="button" data-meaning-group="${esc(g.id)}" aria-pressed="${!!active&&g.id===active.id}">${esc(g.title)}<small class="meaning-index-frequency">${meaningFrequencyLabel(g)}</small></button>`).join('')}</nav></details></nav></section>${shown.length ? shown.map(g=>meaningGroupCard(g,shown.length===1 || !!query)).join('') : '<section class="card"><p>暂未整理这个义项。可以切换「中文→英文」查询完整词库。</p></section>'}`;
+  els.result.innerHTML = `<section class="card meaning-overview"><h3 class="card-title">常见中文义项 · 等价词整理</h3><p>${groups.length} 类义项 · ${wordCount} 个英文词。按原表词对考频从高到低排列。</p><p class="source-note">按相关词对考频加总，同一词对只计一次。词旁数字为该词相关词对合计；暂无记录的排后。</p><nav class="meaning-index" aria-label="选择中文义项"><button type="button" data-meaning-group="all" aria-pressed="${!active}">全部义项</button>${groups.slice(0,9).map(g=>`<button type="button" data-meaning-group="${esc(g.id)}" aria-pressed="${!!active&&g.id===active.id}">${esc(g.title)}<small class="meaning-index-frequency">${meaningFrequencyLabel(g)}</small></button>`).join('')}<details class="meaning-more" ${active && !groups.slice(0,9).includes(active) ? 'open' : ''}><summary>更多义项 · ${groups.length-9} 类</summary><nav class="meaning-index">${groups.slice(9).map(g=>`<button type="button" data-meaning-group="${esc(g.id)}" aria-pressed="${!!active&&g.id===active.id}">${esc(g.title)}<small class="meaning-index-frequency">${meaningFrequencyLabel(g)}</small></button>`).join('')}</nav></details></nav></section>${shown.length ? shown.map(g=>meaningGroupCard(g,shown.length===1 || !!query)).join('') : '<section class="card"><p>暂未整理这个义项。可以切换「中文→英文」查询完整词库。</p></section>'}`;
 }
 function openMeaningGroups(selected = rankedMeaningGroups()[0].id) {
   setSearchMode('groups');els.input.value='';showMeaningGroups('',selected);els.input.focus();
