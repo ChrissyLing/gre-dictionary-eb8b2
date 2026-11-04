@@ -301,6 +301,29 @@ const files = async url=> {
   assert(!studyGroups.groups.find(g=>g.id==='prevent').subgroups.some(s=>s.words.includes('inevitable')),'negative gloss matching must not add antonyms');
   assert(!studyGroups.groups.find(g=>g.id==='truthful').subgroups.some(s=>s.words.includes('plausible')),'plausible is not guaranteed truth');
   assert(!studyGroups.groups.find(g=>g.id==='concise').subgroups[0].words.includes('brusque'),'rudeness is not concision');
+  const ranked=a.c.rankedMeaningGroups();
+  assert.equal(ranked.length,80);
+  assert.equal(new Set(ranked.map(g=>g.id)).size,80,'sorting preserves all groups');
+  assert.equal(ranked[0].id,'praise');
+  assert.equal(a.c.meaningGroupFrequency(ranked[0]),17,'encomiums/tributes source count also ranks their base headwords');
+  const praisePair=a.c.meaningRanking(ranked[0]).pairs.find(p=>p.a==='encomiums'&&p.b==='tributes');
+  assert.equal(praisePair.frequency,17);assert.equal(praisePair.canonicalA,'encomium');
+  let previous=Infinity;
+  for(const g of ranked){
+    const rank=a.c.meaningRanking(g);assert(rank.max<=previous);previous=rank.max;
+    for(const p of rank.pairs)if(p.frequency)assert.equal(p.frequency,a.c.SE_PAIR_FREQ[p.a][p.b]);
+    const words=a.c.rankedMeaningWords(g,a.c.meaningGroupWords(g));
+    let score=Infinity;for(const w of words){assert((rank.scores.get(w)||0)<=score);score=rank.scores.get(w)||0;}
+    const subs=a.c.rankedMeaningSubgroups(g);let subscore=Infinity;
+    for(const sub of subs){const max=Math.max(0,...sub.words.map(w=>rank.scores.get(w)||0));assert(max<=subscore);subscore=max;}
+  }
+  const acid=ranked.find(g=>g.id==='acerbic'), ar=a.c.meaningRanking(acid);
+  assert.equal(ar.scores.get('acerbic'),13,'take max of 13 and 6, never sum into 19');
+  assert.equal(ar.max,13);
+  a.c.openMeaningGroups();assert(a.element('result').innerHTML.includes('最高词对 17 次'));
+  assert(a.element('result').innerHTML.includes('不是单词总考频'));
+  a.c.showMeaningGroups('尖刻');assert(a.element('result').innerHTML.includes('meaning-frequency'));
+  console.log('PASS: descending group/subsense/word/pair frequency ordering; inflected source pairs retain exact counts; missing last; stable ties; no summed frequencies');
   console.log('PASS: 80 reviewed Chinese meaning groups, 1065 traceable and queryable words, tab/filter/all view, exact pair frequencies, semantic boundaries');
   console.log('PASS: bundled bilingual lookup, irregular/derived forms, SE-only words, no external lookup requests, asset caching/retry, local fallback, stale response');
 })().catch(e=>{console.error(e);process.exitCode=1});
