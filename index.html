@@ -200,6 +200,16 @@
   .sense-originals p { line-height: 1.7; margin-top: 7px; }
   .dictionary-details > summary { font-size: 14px; font-weight: 600; color: #6366f1; }
   .dictionary-details[open] > summary { margin-bottom: 14px; }
+  .search-modes { display:flex; gap:8px; margin:24px 0 10px; }
+  .search-modes button { border:1px solid #dedff2; background:#fff; color:#777b93; padding:7px 14px; border-radius:999px; font:inherit; font-size:13px; cursor:pointer; }
+  .search-modes button[aria-pressed="true"] { color:#574bd9; background:#eeecff; border-color:#bcb6fc; font-weight:600; }
+  .mode-hint { margin:8px 0 18px; }
+  .reverse-results { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); gap:10px; margin-top:16px; }
+  .reverse-word { display:flex; flex-direction:column; align-items:flex-start; gap:5px; text-align:left; padding:13px 15px; border:1px solid #e5e3f3; border-radius:12px; background:#fafaff; color:#33364d; font:inherit; cursor:pointer; overflow-wrap:anywhere; }
+  .reverse-word:hover { background:#f0edff; border-color:#aaa1ef; }
+  .reverse-word b { color:#6254da; font-size:17px; }
+  .reverse-word span { font-size:13px; line-height:1.6; }
+  .reverse-word small { color:#9396aa; font-size:11px; }
 </style>
 </head>
 <body>
@@ -209,10 +219,16 @@
     <p class="subtitle">中英释义 · 一词多义 · 六选二等价词 · 真题例句 · 近义词</p>
   </header>
 
+  <div class="search-modes" role="group" aria-label="选择查询方向">
+    <button type="button" id="englishModeBtn" aria-pressed="true">英文查词</button>
+    <button type="button" id="chineseModeBtn" aria-pressed="false">中文→英文</button>
+  </div>
   <div class="search-bar">
     <input id="searchInput" type="text" placeholder="输入要查的单词，如 ephemeral" autocomplete="off" spellcheck="false">
     <button id="searchBtn" type="button">查 询</button>
   </div>
+
+  <p id="searchModeHint" class="source-note mode-hint">查询英文释义；也可切换为中文→英文。</p>
 
   <div class="chips-row" id="historyRow" hidden>
     <span class="chips-label">最近查询</span>
@@ -243,7 +259,7 @@
   </section>
 
   <footer>
-    <span id="appVersion">版本 2026.11.03.1 · 站内英汉词库</span><br>
+    <span id="appVersion">版本 2026.11.04.1 · 站内英汉词库</span><br>
     基础词典：<a href="https://github.com/skywind3000/ECDICT" target="_blank" rel="noopener">ECDICT</a> · 释义和音标随本站提供 · 例句翻译按需联网<br>
     GRE 资料：急救1400词 · 青山答案词 · 多源六选二等价词 · 真经等价词汇总 · 镇考机经词7.0 · 阅读机经核心词汇；各资料及例句分别标注 · 仅供个人学习使用
   </footer>
@@ -855,7 +871,108 @@ function tts(word) {
 }
 
 /* ================= 查询主流程 ================= */
+/* 中文反查使用本站释义，不自动请求外部翻译服务。 */
+let searchMode = 'en';
+let chineseIndexPromise = null;
+let studyChineseEntries = null;
+function setSearchMode(mode) {
+  searchMode = mode === 'zh' ? 'zh' : 'en';
+  const chinese = searchMode === 'zh';
+  els.input.placeholder = chinese ? '输入中文词义，如 难以理解、阻止、苹果' : '输入要查的单词，如 ephemeral';
+  document.getElementById('englishModeBtn').setAttribute('aria-pressed', String(!chinese));
+  document.getElementById('chineseModeBtn').setAttribute('aria-pressed', String(chinese));
+  document.getElementById('searchModeHint').textContent = chinese ? '输入简短中文词义，找到英文候选词后点击查词。' : '查询英文释义；也可切换为中文→英文。';
+}
+function chineseKey(text) {
+  return String(text || '').normalize('NFKC').replace(/[^\u3400-\u9fff0-9]/g, '');
+}
+function studyReverseEntries() {
+  if (studyChineseEntries) return studyChineseEntries;
+  const records = new Map();
+  const add = (word, meanings) => {
+    if (!/^[a-z][a-z '-]*$/.test(word)) return;
+    const text = meanings.filter(Boolean).join('；');
+    if (!text) return;
+    const old = records.get(word);
+    if (old) { if (!old[1].includes(text)) old[1] += '；' + text; }
+    else records.set(word, [word, text]);
+  };
+  Object.entries(W1400).forEach(([w,d]) => add(w,d.s.map(s=>s.zh)));
+  Object.entries(QS).forEach(([w,d]) => add(w,d.s.map(s=>s.zh)));
+  Object.entries(JJ_TOWN).forEach(([w,d]) => add(w,d.senses.map(s=>s.zh)));
+  Object.entries(JJ_READ).forEach(([w,d]) => add(w,d.s.map(s=>s.zh)));
+  Object.entries(EXTRA_EQ).forEach(([w,list]) => add(w,list.map(e=>e.zh)));
+  studyChineseEntries = [...records.values()];
+  return studyChineseEntries;
+}
+function loadChineseIndex() {
+  if (!chineseIndexPromise) {
+    chineseIndexPromise = fetchTimeout('data/zh-en-v1.json', 20000).then(async response => {
+      if (!response.ok) throw new Error('Chinese index HTTP ' + response.status);
+      const data = await response.json();
+      if (data.version !== 1 || !Array.isArray(data.entries) || !data.entries.every(e=>Array.isArray(e)&&e.length===2&&e.every(v=>typeof v==='string'))) throw new Error('Invalid Chinese index');
+      return data.entries;
+    }).catch(error=>{chineseIndexPromise=null;throw error;});
+  }
+  return chineseIndexPromise;
+}
+function chineseCandidates(query, basicEntries = []) {
+  const key = chineseKey(query);
+  if (!key) return [];
+  const families = [['难懂','难理解','难以理解'],['阻止','防止','制止'],['相称','相称的']];
+  const alternatives = families.find(f=>f.includes(key)) || [];
+  const found = new Map();
+  const scan = (entries, gre) => entries.forEach(([word, zh])=>{
+    const normalized = chineseKey(zh);
+    const parts = zh.split(/[，,、；;\n]/).map(p=>chineseKey(p).replace(/的$/, ''));
+    const exact = parts.includes(key.replace(/的$/, ''));
+    const direct = normalized.includes(key);
+    const related = !direct && alternatives.some(k=>normalized.includes(k));
+    if (!exact && !direct && !related) return;
+    const score = (exact ? 1000 : direct ? 500 : 200) + (gre ? 35 : 0) - Math.min(zh.length, 200) / 20;
+    const old = found.get(word);
+    if (!old || score > old.score) found.set(word,{word,zh,score,gre});
+  });
+  scan(basicEntries,false);scan(studyReverseEntries(),true);
+  return [...found.values()].sort((a,b)=>b.score-a.score || a.word.localeCompare(b.word));
+}
+function renderChineseResults(query, matches) {
+  current = null;
+  const list = matches.slice(0,30);
+  els.result.innerHTML = `<section class="card"><h3 class="card-title">中文→英文 · ${esc(query)}</h3>
+    <p class="source-note">根据站内释义匹配，点击英文词查看具体义项、例句与原题。</p>
+    ${list.length ? `<div class="reverse-results">${list.map(item=>`<button type="button" class="reverse-word" data-word="${esc(item.word)}"><b>${esc(item.word)}</b><span>${esc(item.zh.replace(/\\r|\\n/g,' ').slice(0,150))}${item.zh.length>150?'…':''}</span><small>${item.gre?'GRE 资料':'基础词库'}</small></button>`).join('')}</div>` : '<p class="empty-note">暂未找到对应英文，请换用更短的中文词义或近义说法。</p>'}
+    ${matches.length>30 ? `<p class="source-note">共匹配 ${matches.length} 个词，先显示最相关的 30 个；可输入更具体的词义缩小范围。</p>` : ''}
+    </section>`;
+  els.result.hidden = false;
+}
+async function doChineseSearch(raw) {
+  const seq = ++reqSeq;
+  const query = String(raw).normalize('NFKC').trim();
+  setSearchMode('zh');
+  els.input.value = query;
+  els.empty.hidden = true;els.result.hidden = true;current = null;
+  if (!/[\u3400-\u9fff]/.test(query) || query.length>40 || !/^[\u3400-\u9fffA-Za-z0-9\s，,、；;。.!！?？·（）()'-]+$/.test(query)) {
+    els.status.innerHTML = '<div class="error">请输入简短中文词义，例如「难以理解」或「阻止」（最多40字）。</div>';
+    return;
+  }
+  const localMatches = chineseCandidates(query);
+  if (localMatches.length) {renderChineseResults(query,localMatches);els.status.innerHTML='';}
+  else els.status.innerHTML='<div class="loading"><span class="spinner"></span>正在匹配中文词义…</div>';
+  try {
+    const entries=await loadChineseIndex();
+    if (seq!==reqSeq) return;
+    renderChineseResults(query,chineseCandidates(query,entries));
+    els.status.innerHTML='';
+  } catch(error) {
+    if(seq!==reqSeq) return;
+    els.status.innerHTML=localMatches.length?'':'<div class="error">中文反查索引暂未加载，请再次点击查询重试；英文查词仍可使用。</div>';
+  }
+}
+
 async function doSearch(raw) {
+  if (/[\u3400-\u9fff]/.test(String(raw))) return doChineseSearch(raw);
+  setSearchMode('en');
   const seq = ++reqSeq;
   const word = normalizeStudyWord(raw).replace(/\s+/g, ' ');
   if (!word) return;
@@ -983,6 +1100,8 @@ function exportFavs() {
 }
 
 /* ================= 事件绑定 ================= */
+document.getElementById('englishModeBtn').addEventListener('click', () => {setSearchMode('en');els.input.focus();});
+document.getElementById('chineseModeBtn').addEventListener('click', () => {setSearchMode('zh');els.input.focus();});
 els.btn.addEventListener('click', () => doSearch(els.input.value));
 els.input.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(els.input.value); });
 

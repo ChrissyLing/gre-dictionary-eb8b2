@@ -8,7 +8,7 @@ const html = fs.readFileSync(process.argv[2] || path.join(root, 'index.html'), '
 function app(fetcher) {
   const elements = new Map(), stored = new Map(), requests = [];
   function element(id) {
-    if (!elements.has(id)) elements.set(id, {innerHTML:'', textContent:'', hidden:false, value:'', isConnected:true, classList:{toggle(){}}, addEventListener(){}, querySelectorAll(){return []}, querySelector(){return null}, focus(){}, select(){}});
+    if (!elements.has(id)) elements.set(id, {innerHTML:'', textContent:'', hidden:false, value:'', isConnected:true, attributes:{}, setAttribute(k,v){this.attributes[k]=v}, classList:{toggle(){}}, addEventListener(){}, querySelectorAll(){return []}, querySelector(){return null}, focus(){}, select(){}});
     return elements.get(id);
   }
   const c = {console, setTimeout, clearTimeout, AbortController, URL, Blob,
@@ -22,7 +22,7 @@ function app(fetcher) {
   return {c,element,stored,requests};
 }
 const files = async url=> {
-  assert.match(url, /^data\/(?:v4\/[a-z]|questions-v1)\.json$/,'lookup must use bundled assets only');
+  assert.match(url, /^data\/(?:v4\/[a-z]|questions-v1|zh-en-v1)\.json$/,'lookup must use bundled assets only');
   return {ok:true,status:200,json:async()=>JSON.parse(fs.readFileSync(path.join(root,url),'utf8'))};
 };
 (async()=>{
@@ -214,5 +214,32 @@ const files = async url=> {
   assert(!concise.includes('<details open'),'details stay collapsed initially');
   await a.c.doSearch('elusive');
   assert.equal((a.element('result').innerHTML.match(/class="kaofa merged-sense"/g)||[]).length,2);
+  await a.c.doSearch('难以理解');
+  assert(a.element('result').innerHTML.includes('中文→英文 · 难以理解'));
+  assert(a.element('result').innerHTML.includes('data-word="elusive"'),'Chinese meaning finds its English headword');
+  assert.equal(a.element('chineseModeBtn').attributes['aria-pressed'],'true');
+  assert.equal(a.element('status').innerHTML,'');
+  const reverse=await a.c.loadChineseIndex();
+  assert(a.c.chineseCandidates('苹果',reverse).slice(0,30).some(r=>r.word==='apple'),'general Chinese words use bundled bilingual dictionary');
+  await a.c.doSearch('苹果');
+  assert(a.element('result').innerHTML.includes('data-word="apple"'));
+  assert.equal(a.requests.filter(url=>url==='data/zh-en-v1.json').length,1,'reverse dictionary is loaded once');
+  await a.c.doSearch('elusive');
+  assert.equal(a.element('englishModeBtn').attributes['aria-pressed'],'true','candidate lookup returns to English mode');
+  assert.equal((a.element('result').innerHTML.match(/class="kaofa merged-sense"/g)||[]).length,2,'compact meanings stay intact');
+  await b.c.doSearch('难懂');
+  assert(b.element('result').innerHTML.includes('data-word="elusive"'),'GRE reverse search works if extended index is unavailable');
+  assert.equal(b.element('status').innerHTML,'');
+  const requestsBefore=b.requests.length;
+  await b.c.doChineseSearch('中'.repeat(41));
+  assert(b.element('status').innerHTML.includes('最多40字'));
+  assert.equal(b.requests.length,requestsBefore,'invalid input does not make requests');
+  let releaseReverse;
+  const chineseRace=app(url=>url==='data/zh-en-v1.json' ? new Promise(resolve=>{releaseReverse=()=>resolve({ok:true,json:async()=>({version:1,entries:reverse})})}) : files(url));
+  const chinesePending=chineseRace.c.doSearch('苹果');
+  await chineseRace.c.doSearch('pragmatic');releaseReverse();await chinesePending;
+  assert(chineseRace.element('result').innerHTML.includes('word-title'),'late reverse lookup cannot replace a new English search');
+  assert(!chineseRace.element('result').innerHTML.includes('中文→英文 · 苹果'));
+  assert(a.requests.every(url=>/^data\//.test(url)),'neither lookup direction contacts third-party APIs');
   console.log('PASS: bundled bilingual lookup, irregular/derived forms, SE-only words, no external lookup requests, asset caching/retry, local fallback, stale response');
 })().catch(e=>{console.error(e);process.exitCode=1});
