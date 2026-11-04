@@ -327,6 +327,19 @@ const files = async url=> {
   a.c.openMeaningGroups();assert(a.element('result').innerHTML.includes('词对考频合计'));
   assert(a.element('result').innerHTML.includes('同一词对只计一次'));
   a.c.showMeaningGroups('尖刻');assert(a.element('result').innerHTML.includes('meaning-frequency'));
+  for(const group of studyGroups.groups){
+    const markup=a.c.meaningSubgroupsBody(group);
+    const keys=new Set();
+    for(const pair of a.c.meaningRanking(group).pairs){
+      keys.add([pair.a,pair.b].sort().join('|'));
+      assert(markup.includes('data-word="'+pair.a+'"'),pair.a+' pair endpoint visible');
+      assert(markup.includes('data-word="'+pair.b+'"'),pair.b+' pair endpoint visible');
+    }
+    assert.equal((markup.match(/class="meaning-pair-arrow"/g)||[]).length,keys.size,'each actual pair is connected exactly once, including cross-sense pairs');
+  }
+  const acidMarkup=a.c.meaningSubgroupsBody(studyGroups.groups.find(g=>g.id==='acerbic'));
+  assert.match(acidMarkup,/data-word="acerbic">acerbic<\/button> <span class="meaning-pair-arrow"[^>]*>↔<\/span> <button[^>]*data-word="vitriolic">vitriolic/);
+  console.log('PASS: source pairs are visible with arrows, no invented pair links, all original counts unchanged');
   console.log('TOP SUMS',JSON.stringify(ranked.slice(0,6).map(g=>[g.title,a.c.meaningGroupFrequency(g)])));
   console.log('PASS: descending group/subsense/word/pair frequency ordering; inflected source pairs retain exact counts; missing last; stable ties; summed distinct source-pair frequencies without double counting');
   console.log('PASS: 80 reviewed Chinese meaning groups, 1065 traceable and queryable words, tab/filter/all view, exact pair frequencies, semantic boundaries');

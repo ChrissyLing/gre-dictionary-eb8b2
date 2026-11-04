@@ -35,7 +35,36 @@ const root=path.resolve(__dirname,'..');
     await page.locator('.meaning-group[open] [data-word=acerbic]').first().click();
     await page.locator('#result').getByText('acerbic',{exact:true}).first().waitFor();
     assert.equal(await page.locator('#englishModeBtn').getAttribute('aria-pressed'),'true');
+    for (const viewport of [{width:1100,height:850},{width:390,height:844}]) {
+      await page.setViewportSize(viewport);
+      await page.locator('[data-return-meaning]').click();
+      await page.waitForFunction(()=>document.getElementById('meaningGroupsBtn').getAttribute('aria-pressed')==='true');
+      await page.locator('#searchInput').fill('陈腐');await page.locator('#searchBtn').click();
+      await page.locator('.meaning-more > summary').click();
+      await page.locator('.meaning-group[open] .meaning-evidence > summary').last().click();
+      const word=page.locator('.meaning-group[open] .meaning-word').first();
+      await word.scrollIntoViewIfNeeded();
+      const saved=await page.evaluate(()=>({html:document.getElementById('result').innerHTML,y:scrollY,input:document.getElementById('searchInput').value}));
+      await word.click();await page.locator('[data-return-meaning]').waitFor();
+      await page.locator('[data-return-meaning]').click();
+      await page.waitForFunction(()=>document.getElementById('meaningGroupsBtn').getAttribute('aria-pressed')==='true');
+      assert.equal(await page.locator('#result').innerHTML(),saved.html,'restore exact list and all expanded details');
+      assert.equal(await page.locator('#searchInput').inputValue(),saved.input,'restore filter');
+      assert(Math.abs(await page.evaluate(()=>scrollY)-saved.y)<3,'restore original scroll position');
+      await page.locator('.meaning-group[open] .meaning-word').first().click();
+      await page.locator('[data-return-meaning]').waitFor();
+      await page.goBack();
+      await page.waitForFunction(()=>document.getElementById('meaningGroupsBtn').getAttribute('aria-pressed')==='true');
+      assert.equal(await page.locator('#result').innerHTML(),saved.html,'browser Back restores origin');
+      await page.goForward();await page.locator('[data-return-meaning]').waitFor();
+      await page.locator('#meaningGroupsBtn').click();
+      await page.waitForFunction(()=>document.getElementById('meaningGroupsBtn').getAttribute('aria-pressed')==='true');
+      assert.equal(await page.locator('#result').innerHTML(),saved.html,'mode tab also returns to origin');
+      // Start the next viewport with a word screen so the return button can be exercised again.
+      await page.locator('.meaning-group[open] .meaning-word').first().click();
+      await page.locator('[data-return-meaning]').waitFor();
+    }
     assert.deepEqual(errors,[]);
-    console.log('PASS: actual More click, group selection scrolls visibly, return to directory, desktop/mobile, and word lookup');
+    console.log('PASS: actual More click, group selection scrolls visibly, return to directory, desktop/mobile, word lookup, exact origin restore, browser Back/Forward, and mode-tab return');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
