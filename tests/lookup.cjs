@@ -269,5 +269,38 @@ const files = async url=> {
   await a.c.doSearch('elusive');
   assert(!a.element('result').innerHTML.includes('zw 镇考3000词 · 补充'),'existing compact meanings not duplicated');
   console.log('PASS: zw3000 fallback',supplemental.length,'queryable entries; precedence, provenance, phrases, examples, Chinese reverse lookup');
+  const studyGroups=a.c.MEANING_GROUPS;
+  assert.equal(studyGroups.groups.length,80);
+  assert.equal(Object.keys(studyGroups.words).length,1065);
+  assert.deepEqual(Array.from(studyGroups.groups.slice(0,4),g=>g.id),['prevent','unusual','trite','acerbic']);
+  for(const id of ['novel','avoid','basic','petty','fair'])assert(studyGroups.groups.some(g=>g.id===id),'requested category '+id);
+  a.c.openMeaningGroups();
+  assert.equal(a.element('meaningGroupsBtn').attributes['aria-pressed'],'true');
+  assert.equal(a.element('englishModeBtn').attributes['aria-pressed'],'false');
+  assert(a.element('result').innerHTML.includes('阻止、妨碍、抑制'));
+  a.element('searchInput').value='尖刻';a.c.searchFromInput();
+  assert(a.element('result').innerHTML.includes('acerbic'));
+  assert(a.element('result').innerHTML.includes('原表词对考频 13 次'));
+  a.element('searchInput').value='不存在的义项';a.c.searchFromInput();
+  assert(a.element('result').innerHTML.includes('暂未整理'));
+  a.c.showMeaningGroups('','all');
+  assert.equal((a.element('result').innerHTML.match(/class="card meaning-group"/g)||[]).length,80);
+  for(const g of studyGroups.groups){
+    const groupWords=new Set(a.c.meaningGroupWords(g));
+    for(const pair of g.pairs){
+      assert(groupWords.has(pair.a)&&groupWords.has(pair.b));
+      if(pair.frequency)assert.equal(pair.frequency,a.c.SE_PAIR_FREQ[pair.a][pair.b],'frequency must be exact source-pair count');
+    }
+  }
+  for(const word of Object.keys(studyGroups.words)){
+    assert(studyGroups.words[word].records.length,word+' has traceable source');
+    await a.c.doSearch(word);
+    assert.equal(a.element('status').innerHTML,'',word+' group chip opens an existing entry');
+    assert.equal(a.element('result').hidden,false);
+  }
+  assert(!studyGroups.groups.find(g=>g.id==='prevent').subgroups.some(s=>s.words.includes('inevitable')),'negative gloss matching must not add antonyms');
+  assert(!studyGroups.groups.find(g=>g.id==='truthful').subgroups.some(s=>s.words.includes('plausible')),'plausible is not guaranteed truth');
+  assert(!studyGroups.groups.find(g=>g.id==='concise').subgroups[0].words.includes('brusque'),'rudeness is not concision');
+  console.log('PASS: 80 reviewed Chinese meaning groups, 1065 traceable and queryable words, tab/filter/all view, exact pair frequencies, semantic boundaries');
   console.log('PASS: bundled bilingual lookup, irregular/derived forms, SE-only words, no external lookup requests, asset caching/retry, local fallback, stale response');
 })().catch(e=>{console.error(e);process.exitCode=1});
