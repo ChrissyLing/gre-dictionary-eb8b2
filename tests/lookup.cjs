@@ -369,6 +369,19 @@ const files = async url=> {
   assert.equal(machineCalls,1,'machine response cache avoids repeat calls but remains unverified');
   assert.equal(Object.values(a.c.EXAMPLE_TRANSLATIONS.entries).filter(r=>r.kind==='reviewed').length,22);
   console.log('PASS: checked/source translation priority, corrected wine context, flagged source sentences, explicitly unverified machine output, no automatic translation, escaped output and prefilled correction link');
+  for(const appCase of [a,b]){
+    await appCase.c.doSearch('disapprobation');
+    const result=appCase.element('result').innerHTML;
+    assert(result.includes('不赞同；不认可；谴责'));
+    assert(result.includes('不可数名词'));
+    assert(result.includes('Cambridge Dictionary'));
+    assert(result.includes('censure'));
+    assert(result.includes('原表词对考频4次'),'existing pair frequency preserved');
+    assert(!result.includes('已收录等价词与相关资料'),'generic placeholder replaced by definition even with dictionary assets unavailable');
+  }
+  await a.c.doSearch('disapprobations');assert(a.element('result').innerHTML.includes('不赞同；不认可'));
+  assert(a.c.chineseCandidates('不赞同').some(r=>r.word==='disapprobation'),'checked definition is also available in Chinese reverse lookup');
+  console.log('PASS checked definition fills an equivalence-only word, retains pair data, works with missing dictionary assets and inflected forms');
   console.log('TOP SUMS',JSON.stringify(ranked.slice(0,6).map(g=>[g.title,a.c.meaningGroupFrequency(g)])));
   console.log('PASS: descending group/subsense/word/pair frequency ordering; inflected source pairs retain exact counts; missing last; stable ties; summed distinct source-pair frequencies without double counting');
   console.log('PASS: 80 reviewed Chinese meaning groups, 1065 traceable and queryable words, tab/filter/all view, exact pair frequencies, semantic boundaries');
