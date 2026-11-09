@@ -40,3 +40,11 @@
 `PLAYWRIGHT_MODULE=/absolute/path/to/playwright node tests/browser.cjs` 使用隔离 Chrome、拦截本地资源，验证未配置状态、本机收藏、查词星标桥接、复习和手机布局。不会访问用户的浏览器登录信息。
 
 SDK：本地打包 `@cloudbase/js-sdk@3.9.2`，避免依赖外部脚本 CDN。见 `THIRD_PARTY_NOTICES.txt`。
+
+## 0.1.1：密码登录
+
+CloudBase「身份认证 → 登录方式」需开启「用户名密码」。支持邮箱或已绑定用户名配合密码登录；新用户先用邮箱验证码创建账号。已有账号选择「首次设置密码 / 忘记密码」，使用原邮箱获取重置验证码，再设置密码；登录后也可在「我的账号 → 设置 / 重置密码」操作。
+
+使用官方 SDK `signInWithPassword`、`resetPasswordForEmail` 及其 `data.updateUser({nonce,password})` 闭包。没有使用普通 `updateUser` 修改密码，也不会在 localStorage 或个人收藏表存储密码。密码错误、验证码错误等验证结果由 CloudBase 认证服务决定。
+
+旧用户继续使用 0.1.0；在「版本」中主动切换到 0.1.1。新版本沿用相同账号 ID 与 v1 收藏/复习表。新增测试 `tests/password-provider.mjs` 和 `tests/password-browser.cjs`，覆盖 SDK 参数、挑战绑定、密码登录和重置、重新登录、原有收藏保留及验证码入口回归。浏览器密码流程用模拟服务验证；真实密码设置和登录需由账号持有人完成，不向维护者发送密码或验证码。
