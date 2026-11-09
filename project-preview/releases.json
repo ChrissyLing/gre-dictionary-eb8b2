@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.1.2",
+  "defaultRelease": "0.1.3",
   "releases": [
     {
       "id": "0.1.0",
@@ -28,6 +28,15 @@
       "available": true,
       "publishedAt": "2026-11-10",
       "notes": "账号密码、邮箱验证码、短信验证码；支持在原邮箱账号绑定手机号，沿用收藏和复习记录。"
+    },
+    {
+      "id": "0.1.3",
+      "name": "紧凑查词界面",
+      "path": "releases/0.1.3/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-10",
+      "notes": "去掉查词外框和顶部提示边框，缩小顶部留白与重复标题；保留三种登录、收藏和复习。"
     }
   ]
 }
