@@ -1,0 +1,4 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GRE 个人学习空间</title></head><body style="font-family:system-ui;color:#666;padding:40px"><p id="status">正在打开你选定的版本…</p><a href="../index.html">返回原查词网站</a><script type="module">
+import {selectRelease,safeReleaseUrl} from './releases/0.1.0/core.mjs';
+try{const catalogUrl=new URL('./releases.json',location.href);const r=await fetch(catalogUrl,{cache:'no-store'});if(!r.ok)throw Error('版本目录暂时无法加载');const catalog=await r.json();const pinned=localStorage.getItem('gre-project:pinnedRelease');const release=selectRelease(catalog,pinned);localStorage.setItem('gre-project:pinnedRelease',release.id);location.replace(safeReleaseUrl(catalogUrl,release,location.origin).href);}catch(error){document.getElementById('status').textContent='未能打开学习空间：'+error.message;}
+</script></body></html>
