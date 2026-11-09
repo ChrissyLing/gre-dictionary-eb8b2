@@ -280,11 +280,14 @@ const files = async url=> {
   assert(a.element('result').innerHTML.includes('阻止、妨碍、抑制'));
   a.element('searchInput').value='尖刻';a.c.searchFromInput();
   assert(a.element('result').innerHTML.includes('acerbic'));
+  assert.equal((a.element('result').innerHTML.match(/class="meaning-tile"/g)||[]).length,1,'filter shows a directory card, not inline details');
+  a.c.showMeaningGroups('尖刻','acerbic');
   assert(a.element('result').innerHTML.includes('原表词对考频 13 次'));
+  assert(!a.element('result').innerHTML.includes('meaning-overview'),'detail page is separate from directory');
   a.element('searchInput').value='不存在的义项';a.c.searchFromInput();
   assert(a.element('result').innerHTML.includes('暂未整理'));
   a.c.showMeaningGroups('','all');
-  assert.equal((a.element('result').innerHTML.match(/class="card meaning-group"/g)||[]).length,80);
+  assert.equal((a.element('result').innerHTML.match(/class="meaning-tile"/g)||[]).length,80);
   for(const g of studyGroups.groups){
     const groupWords=new Set(a.c.meaningGroupWords(g));
     for(const pair of g.pairs){
@@ -326,7 +329,7 @@ const files = async url=> {
   assert.equal(a.c.meaningRanking(fixture).total,13,'reverse direction must not double count the same source pair');
   a.c.openMeaningGroups();assert(a.element('result').innerHTML.includes('词对考频合计'));
   assert(a.element('result').innerHTML.includes('同一词对只计一次'));
-  a.c.showMeaningGroups('尖刻');assert(a.element('result').innerHTML.includes('meaning-frequency'));
+  a.c.showMeaningGroups('尖刻','acerbic');assert(a.element('result').innerHTML.includes('meaning-frequency'));
   for(const group of studyGroups.groups){
     const markup=a.c.meaningSubgroupsBody(group);
     const keys=new Set();
