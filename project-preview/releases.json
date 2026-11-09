@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.1.1",
+  "defaultRelease": "0.1.2",
   "releases": [
     {
       "id": "0.1.0",
@@ -19,6 +19,15 @@
       "available": true,
       "publishedAt": "2026-11-10",
       "notes": "新增邮箱/用户名密码登录、邮箱验证设置或重置密码；保留验证码入口，沿用原账号收藏和复习记录。"
+    },
+    {
+      "id": "0.1.2",
+      "name": "三种登录与手机号绑定",
+      "path": "releases/0.1.2/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-10",
+      "notes": "账号密码、邮箱验证码、短信验证码；支持在原邮箱账号绑定手机号，沿用收藏和复习记录。"
     }
   ]
 }
