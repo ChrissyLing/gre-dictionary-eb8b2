@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {QuantStore} from '../releases/0.2.1/quant-store.mjs';
+import {LearningStore} from '../releases/0.2.1/core.mjs';
+import {CloudBaseProvider} from '../releases/0.2.1/provider.mjs';
+import {buildMatcher,containsTerm} from '../releases/0.2.1/quant-match.mjs';
+const storage=()=>{const m=new Map();return {getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,v)};};
+const id='zw900-p005-q001-0001',mem=storage(),cloud=new Map(),calls=[];
+const provider={putQuantRows:async(rows,uid)=>{calls.push(uid);for(const r of rows)cloud.set(uid+':'+r.word,r);},getQuantRows:async uid=>[...cloud].filter(([key])=>key.startsWith(uid+':')).map(([,r])=>r)};
+const a=new QuantStore(mem,{uid:'alice'});a.change(id,{wrong:true,words:['consecutive'],concepts:['remainder'],reason:'条件漏读'});await a.sync(provider);assert.equal(Object.keys(a.pending).length,0);
+const other=new QuantStore(storage(),{uid:'alice'});await other.sync(provider);assert(other.get(id).wrong);assert.deepEqual(other.get(id).words,['consecutive']);other.change(id,{wrong:false});await other.sync(provider);await a.sync(provider);assert(!a.get(id).wrong,'tombstone removes old mark on another device');
+a.activate('bob');assert.equal(a.wrong().length,0);await a.sync(provider);assert.equal(Object.keys(a.rows).length,0);a.activate('alice');assert.equal(a.get(id).reason,'条件漏读');
+const legacy=new LearningStore(storage(),{uid:'alice'});legacy.mergeCloud(await provider.getQuantRows('alice'));assert.equal(legacy.favorites().length,0);assert.equal(Object.keys(legacy.rows).length,0,'reserved quant records do not pollute vocabulary');
+const before={...a.pending};a.change(id,{wrong:true});await assert.rejects(a.sync({putQuantRows:async()=>{throw Error('offline');}}));assert(a.pending[id]);
+let finish;const race={putQuantRows:()=>new Promise(r=>finish=r),getQuantRows:async()=>[]};const pending=a.sync(race);a.change(id,{wrong:false});finish();await pending;assert(a.pending[id],'new edit during upload stays pending');
+let resolve;const switching=a.sync({putQuantRows:()=>new Promise(r=>resolve=r),getQuantRows:async()=>{throw Error('should not fetch stale user');}});a.activate('bob');resolve();assert((await switching).stale);assert.equal(Object.keys(a.rows).length,0);
+const matcher=buildMatcher({questions:[{id:'one',searchText:'Three consecutive integers leave a remainder',ordinal:1},{id:'two',searchText:'Find the remainder when divided by 5',ordinal:2},{id:'three',searchText:'The circumference of a circle',ordinal:3}]});assert(matcher.matches({id:'one',searchText:'Three consecutive integers leave a remainder'},'余数'));assert(!containsTerm('bar chart','art'));assert(containsTerm('positive integers','integer'));assert(matcher.related({id:'one',searchText:''}).some(x=>x.question.id==='two'));assert(!matcher.related({id:'one',searchText:''}).some(x=>x.question.id==='three'));
+const db=Object.create(CloudBaseProvider.prototype);const paths=[];db.request=async(path,opts,uid)=>{paths.push({path,uid});return []};await db.getQuantRows('alice');assert(paths[0].path.includes('word=like.%40q%3A*'));assert.equal(paths[0].uid,'alice');
+console.log('PASS: owner isolation, cross-device marks/removal, offline retention, upload race/account switch, old vocabulary compatibility, bilingual matching and reserved-key queries');

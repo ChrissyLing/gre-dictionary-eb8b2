@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.2.0",
+  "defaultRelease": "0.2.1",
   "releases": [
     {
       "id": "0.1.0",
@@ -46,6 +46,15 @@
       "available": true,
       "publishedAt": "2026-11-10",
       "notes": "V区保留查词、收藏与复习；Q区按26个知识专题整理1993道题，支持难度/来源筛选、原题图像和返回位置。"
+    },
+    {
+      "id": "0.2.1",
+      "name": "错题与概念生词匹配",
+      "path": "releases/0.2.1/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-10",
+      "notes": "数学错题标记、错因笔记与生词跟随账号保存；支持中英文核心概念/生词找题、查看匹配依据和相关练习。"
     }
   ]
 }
