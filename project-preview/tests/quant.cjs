@@ -1,0 +1,24 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..'),release=path.join(root,'releases/0.2.0'),data=JSON.parse(fs.readFileSync(path.join(release,'quant-v1.json')));
+assert.equal(new Set(data.questions.map(q=>q.id)).size,data.questions.length);
+for(const source of data.sources)assert.equal(source.questions,data.questions.filter(q=>q.source===source.id).length);
+for(const q of data.questions){assert(data.topics.some(t=>t.id===q.topic));assert([1,2,3].includes(q.difficulty.level));assert(q.regions.length);for(const r of [...q.regions,...(q.solutionRegions||[])]){assert(r.y>=0&&r.end<=1&&r.end>r.y);assert(data.pageAssets[`${q.source}-${String(r.page).padStart(3,'0')}.webp`]);}}
+for(const [key,count] of [['zw900',900],['recall360',360],['hard170',169]])assert.equal(data.questions.filter(q=>q.source===key).length,count);
+const nativeEasy=data.questions.filter(q=>q.source==='zw900'&&q.difficulty.level===1&&q.difficulty.basis==='source');assert.equal(nativeEasy.length,60);assert(nativeEasy.every(q=>q.difficulty.basis==='source'));
+const foundationIntegers=data.questions.filter(q=>(q.topic==='integers'||q.tags.includes('integers'))&&q.source==='zw900'&&q.difficulty.level===1).length;
+(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});try{
+const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.route('**/*',route=>{const u=new URL(route.request().url());if(u.origin!=='https://gre.local')return route.abort();const file=path.resolve(root,u.pathname.replace(/^\/project-preview\//,''));if(!file.startsWith(root+'/')||!fs.existsSync(file)||!fs.statSync(file).isFile())return route.abort();return route.fulfill({path:file,contentType:file.endsWith('.mjs')?'text/javascript':file.endsWith('.json')?'application/json':file.endsWith('.css')?'text/css':'text/html'});});
+await page.route('**/cloudbase-config.json',route=>{const c=JSON.parse(fs.readFileSync(path.join(root,'cloudbase-config.json')));c.enabled=false;return route.fulfill({json:c});});
+for(const width of [1440,390]){
+ await page.setViewportSize({width,height:900});await page.goto('about:blank');await page.goto('https://gre.local/project-preview/releases/0.2.0/index.html#q?topic=integers&source=zw900&level=1');await page.locator('#localPreview').click();await page.locator('.quant-question').first().waitFor();
+ assert.equal(await page.locator('[data-subject="q"]').getAttribute('aria-pressed'),'true');assert(await page.locator('nav.tabs').isHidden());assert.equal(await page.getByLabel('难度',{exact:true}).inputValue(),'1');assert.equal(await page.getByLabel('来源',{exact:true}).inputValue(),'zw900');assert(await page.getByText(`${foundationIntegers} 道匹配题目`,{exact:true}).isVisible());
+ await page.locator('.quant-question').first().click();await page.locator('.quant-paper svg image').first().waitFor({state:'attached'});await page.waitForFunction(()=>document.querySelector('.quant-paper svg image')?.getAttribute('href')?.startsWith('data:image/webp;base64,'));await page.screenshot({path:`/tmp/gre-quant-detail-${width}.png`,fullPage:true});
+ await page.goBack();await page.locator('.quant-question').first().waitFor();assert.equal(await page.getByLabel('来源',{exact:true}).inputValue(),'zw900');await page.goForward();await page.locator('.quant-paper').waitFor();await page.getByRole('button',{name:'← 返回原专题与筛选位置',exact:true}).click();await page.locator('.quant-question').first().waitFor();
+ await page.getByRole('button',{name:'返回专题',exact:true}).click();await page.locator('.quant-topic').first().waitFor();assert.equal(await page.locator('.quant-question').count(),0,'directory does not append all questions');await page.screenshot({path:`/tmp/gre-quant-directory-${width}.png`,fullPage:true});
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+ await page.locator('[data-subject="v"]').click();await page.locator('#dictionaryPane').waitFor({state:'visible'});await page.locator('[data-tab="favorites"]').click();await page.locator('#newWord').fill('elusive');await page.locator('#addForm button').click();assert.equal(await page.locator('.favorite-row').count(),1);await page.locator('[data-subject="q"]').click();await page.locator('.quant-topic').first().waitFor();await page.locator('[data-subject="v"]').click();await page.locator('[data-tab="favorites"]').click();assert.equal(await page.locator('.favorite-row').count(),1,'Q navigation preserves V favorites');
+}
+assert.deepEqual(errors,[]);console.log('PASS: data integrity, original easy grades, V/Q separation, combined topic/source/difficulty filters, lazy original page images, detail/back/forward and retained V favorites; desktop/mobile layout');
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
