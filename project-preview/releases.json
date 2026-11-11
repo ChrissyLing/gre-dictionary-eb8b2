@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.2.1",
+  "defaultRelease": "0.2.2",
   "releases": [
     {
       "id": "0.1.0",
@@ -55,6 +55,15 @@
       "available": true,
       "publishedAt": "2026-11-10",
       "notes": "数学错题标记、错因笔记与生词跟随账号保存；支持中英文核心概念/生词找题、查看匹配依据和相关练习。"
+    },
+    {
+      "id": "0.2.2",
+      "name": "文字题干与原题范围修正",
+      "path": "releases/0.2.2/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-11",
+      "notes": "第52题银行评分题改为经核对的文字、表格与选项，修正裁图误含上一题；其他题提供待核对文字提取入口，原页明确标记为参考。"
     }
   ]
 }

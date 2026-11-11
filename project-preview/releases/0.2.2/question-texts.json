@@ -1,0 +1,47 @@
+{
+  "zw900-p063-q052-0252": {
+    "verified": true,
+    "intro": "The table above summarizes customer satisfaction ratings for two banks, where each rating is an integer from 1 to 10. Which of the following statements are true?",
+    "instruction": "Indicate all such statements.",
+    "table": {
+      "caption": "Customer Satisfaction Ratings",
+      "headers": [
+        "Rating Information",
+        "Bank I",
+        "Bank II"
+      ],
+      "rows": [
+        [
+          "Number of ratings",
+          "155",
+          "160"
+        ],
+        [
+          "Mean rating",
+          "7.4",
+          "5.9"
+        ],
+        [
+          "Standard deviation of ratings",
+          "1.6",
+          "1.8"
+        ]
+      ]
+    },
+    "options": [
+      [
+        "A",
+        "For Bank I, if a rating is within 0.5 standard deviation of the mean rating, then the rating is 7."
+      ],
+      [
+        "B",
+        "For Bank II, if a rating is within 0.4 standard deviation of the mean rating, then the rating is 6."
+      ],
+      [
+        "C",
+        "The sum of all the ratings for Bank I is less than the sum of all the ratings for Bank II."
+      ]
+    ],
+    "sourcePage": 63
+  }
+}
