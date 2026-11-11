@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.2.2",
+  "defaultRelease": "0.2.3",
   "releases": [
     {
       "id": "0.1.0",
@@ -64,6 +64,15 @@
       "available": true,
       "publishedAt": "2026-11-11",
       "notes": "第52题银行评分题改为经核对的文字、表格与选项，修正裁图误含上一题；其他题提供待核对文字提取入口，原页明确标记为参考。"
+    },
+    {
+      "id": "0.2.3",
+      "name": "全部数学题默认文字版",
+      "path": "releases/0.2.3/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-11",
+      "notes": "全部1993道数学题按单题范围重新提取文字，默认显示题干和选项；原图按需展开加载。保留已核对表格，公式/图表仍可对照原图。"
     }
   ]
 }
