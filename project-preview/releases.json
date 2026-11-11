@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.2.3",
+  "defaultRelease": "0.2.4",
   "releases": [
     {
       "id": "0.1.0",
@@ -72,7 +72,16 @@
       "dataSchema": 1,
       "available": true,
       "publishedAt": "2026-11-11",
-      "notes": "全部1993道数学题按单题范围重新提取文字，默认显示题干和选项；原图按需展开加载。保留已核对表格，公式/图表仍可对照原图。"
+      "notes": "已发现OCR遗漏上标等数学内容，不宜将文字草稿作为完整题干作答；建议切换0.2.4查看修复和校对状态。"
+    },
+    {
+      "id": "0.2.4",
+      "name": "数学上标修复与文字校对状态",
+      "path": "releases/0.2.4/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-11",
+      "notes": "修复k³漏成k等上标问题；385道题改用原PDF文字层，4道人工核对（含1道重叠）；其余1605道明确为校对草稿，可按文字状态筛选，图片仍按需展开。"
     }
   ]
 }
