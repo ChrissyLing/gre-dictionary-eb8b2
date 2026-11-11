@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.2.5",
+  "defaultRelease": "0.3.0",
   "releases": [
     {
       "id": "0.1.0",
@@ -91,6 +91,15 @@
       "available": true,
       "publishedAt": "2026-11-11",
       "notes": "全部题目默认显示原文裁图，移除OCR题干和列表摘要；清理误带入的标题/章节，修正第40题完整选项裁图，保留错题、笔记与相关题检索。"
+    },
+    {
+      "id": "0.3.0",
+      "name": "青山阅读、填空与数学题库",
+      "path": "releases/0.3.0/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-11",
+      "notes": "新增青山阅读340篇（含配套题）、填空100套1400题、数学400题；默认原文裁图，支持套题筛选、错题笔记及返回原位置。沿用账号与收藏数据。"
     }
   ]
 }

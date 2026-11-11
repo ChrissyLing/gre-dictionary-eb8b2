@@ -1,0 +1,25 @@
+{
+  "version": "2026.11.02.3",
+  "sources": [
+    {
+      "name": "张巍GRE填空机经2000题.pdf",
+      "sha256": "08af079fff905e997673c6b6037ca9a56d0bc7634cf7b83039ac2d9b9909fb23"
+    },
+    {
+      "name": "张巍GRE阅读机经440篇_副本.pdf",
+      "sha256": "7802a91a9b58af1c2a71323050cf3825ba403c146a343d7e8a8424eac0e2f34c"
+    }
+  ],
+  "counts": {
+    "fillQuestions": 2002,
+    "fillTests": 143,
+    "readingPassages": 440
+  },
+  "notes": [
+    "Source fill book has 143 tests with two sections of seven questions (2002 numbered questions).",
+    "Question numbers and PDF physical page indices preserved; answer keys are not included in the supplied PDFs.",
+    "PDF text ordered by page coordinates, diagonal watermark excluded, table option labels retained and sorted; cross-page continuations attached before next question.",
+    "Original bold emphasis retained for reading items referring to highlighted or bold text.",
+    "Matches include exact tokens, dictionary inflections and exact phrases. An occurrence in an option does not designate the answer."
+  ]
+}
