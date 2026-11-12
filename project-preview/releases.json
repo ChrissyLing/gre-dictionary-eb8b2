@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.3.3",
+  "defaultRelease": "0.3.4",
   "releases": [
     {
       "id": "0.1.0",
@@ -127,6 +127,15 @@
       "available": true,
       "publishedAt": "2026-11-12",
       "notes": "适度统一视觉规范，优化首页直接查词、核心释义与等价词层级；例句始终先于题目，原题显示词汇出现位置，复习增加真实本轮进度。保留V/Q导航与账号学习记录。"
+    },
+    {
+      "id": "0.3.4",
+      "name": "PC左侧学习导航",
+      "path": "releases/0.3.4/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-12",
+      "notes": "PC端将V/Q与学习功能放到左侧，扩大内容区域；手机保留顶部导航，沿用原查词、题库与账号学习记录。"
     }
   ]
 }
