@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.3.1",
+  "defaultRelease": "0.3.2",
   "releases": [
     {
       "id": "0.1.0",
@@ -109,6 +109,15 @@
       "available": true,
       "publishedAt": "2026-11-12",
       "notes": "查词同时匹配青山阅读340篇、填空100套和zw阅读440篇、填空2000题；四份均可在阅读与填空中浏览，支持进入题目后返回原单词与位置。"
+    },
+    {
+      "id": "0.3.2",
+      "name": "管理员产品使用统计",
+      "path": "releases/0.3.2/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-12",
+      "notes": "新增仅管理员可见的注册、活跃、查词及题目浏览统计；按账号去重，数据库校验权限，不收集查询内容或笔记。保留四份语文题集联动与原有学习记录。"
     }
   ]
 }
