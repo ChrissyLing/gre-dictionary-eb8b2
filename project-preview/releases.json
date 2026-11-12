@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.3.0",
+  "defaultRelease": "0.3.1",
   "releases": [
     {
       "id": "0.1.0",
@@ -100,6 +100,15 @@
       "available": true,
       "publishedAt": "2026-11-11",
       "notes": "新增青山阅读340篇（含配套题）、填空100套1400题、数学400题；默认原文裁图，支持套题筛选、错题笔记及返回原位置。沿用账号与收藏数据。"
+    },
+    {
+      "id": "0.3.1",
+      "name": "查词关联四份语文题集",
+      "path": "releases/0.3.1/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-12",
+      "notes": "查词同时匹配青山阅读340篇、填空100套和zw阅读440篇、填空2000题；四份均可在阅读与填空中浏览，支持进入题目后返回原单词与位置。"
     }
   ]
 }
