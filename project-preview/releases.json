@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.3.4",
+  "defaultRelease": "0.3.5",
   "releases": [
     {
       "id": "0.1.0",
@@ -136,6 +136,15 @@
       "available": true,
       "publishedAt": "2026-11-12",
       "notes": "PC端将V/Q与学习功能放到左侧，扩大内容区域；手机保留顶部导航，沿用原查词、题库与账号学习记录。"
+    },
+    {
+      "id": "0.3.5",
+      "name": "释义单层展开与顶部等价词",
+      "path": "releases/0.3.5/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-12",
+      "notes": "英文词典释义合并进释义卡片的单层详情；首次中文释义后增加可点击等价词、资料来源与原表词对考频。沿用PC左侧导航、手机顶部导航与学习记录。"
     }
   ]
 }
