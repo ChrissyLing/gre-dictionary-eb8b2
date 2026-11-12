@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "defaultRelease": "0.3.2",
+  "defaultRelease": "0.3.3",
   "releases": [
     {
       "id": "0.1.0",
@@ -118,6 +118,15 @@
       "available": true,
       "publishedAt": "2026-11-12",
       "notes": "新增仅管理员可见的注册、活跃、查词及题目浏览统计；按账号去重，数据库校验权限，不收集查询内容或笔记。保留四份语文题集联动与原有学习记录。"
+    },
+    {
+      "id": "0.3.3",
+      "name": "查词层级与学习界面优化",
+      "path": "releases/0.3.3/index.html",
+      "dataSchema": 1,
+      "available": true,
+      "publishedAt": "2026-11-12",
+      "notes": "适度统一视觉规范，优化首页直接查词、核心释义与等价词层级；例句始终先于题目，原题显示词汇出现位置，复习增加真实本轮进度。保留V/Q导航与账号学习记录。"
     }
   ]
 }

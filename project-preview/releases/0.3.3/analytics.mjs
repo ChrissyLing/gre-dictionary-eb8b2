@@ -1,0 +1,24 @@
+const kinds=new Set(['active','lookup','question']),uuidPattern=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+export class UsageTracker{
+ constructor(provider,storage,{clock=Date.now,uuid=()=>crypto.randomUUID(),schedule=(fn,ms)=>setTimeout(fn,ms),cancel=id=>clearTimeout(id)}={}){Object.assign(this,{provider,storage,clock,uuid,schedule,cancel});this.uid=null;this.timer=null;this.sending=false;}
+ key(uid){return 'gre-usage:v1:'+uid;}
+ read(uid){try{const rows=JSON.parse(this.storage.getItem(this.key(uid))||'[]');if(!Array.isArray(rows))return[];return rows.filter(e=>e&&uuidPattern.test(e.id)&&kinds.has(e.kind)&&(e.kind!=='question'||['v','q'].includes(e.subject))&&Number.isFinite(e.at)&&e.at>this.clock()-86400000&&e.at<=this.clock()+60000).slice(-200).map(e=>({id:e.id,kind:e.kind,...(e.kind==='question'?{subject:e.subject}:{}),at:e.at}));}catch{return[];}}
+ write(uid,rows){try{this.storage.setItem(this.key(uid),JSON.stringify(rows));}catch{}}
+ activate(uid){this.cancel(this.timer);this.timer=null;this.uid=uid||null;if(this.uid){this.track('active');}}
+ track(kind,subject){if(!this.uid||!kinds.has(kind)||(kind==='question'&&!['v','q'].includes(subject)))return false;const rows=this.read(this.uid);rows.push({id:this.uuid(),kind,...(kind==='question'?{subject}:{}),at:this.clock()});this.write(this.uid,rows.slice(-200));this.cancel(this.timer);this.timer=this.schedule(()=>this.flush(),2000);return true;}
+ async flush(){if(!this.uid||!this.provider||this.sending)return false;const uid=this.uid,batch=this.read(uid).slice(0,50);if(!batch.length)return true;this.sending=true;let ok=false;
+  try{await this.provider.analyticsRpc('gre_usage_record_bound_v1',{p_expected_uid:uid,p_events:batch.map(({at,...e})=>e)},uid);const ids=new Set(batch.map(e=>e.id));this.write(uid,this.read(uid).filter(e=>!ids.has(e.id)));ok=true;}catch{/* Learning remains available; retry the same event IDs without losing this account's queue. */}
+  finally{this.sending=false;this.cancel(this.timer);if(this.uid&&this.read(this.uid).length)this.timer=this.schedule(()=>this.flush(),ok?1000:15000);}
+  return ok;
+ }
+}
+const el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;n.className=cls;return n;};
+const num=value=>Number(value||0).toLocaleString('zh-CN');
+export function renderAnalytics(host,data){host.replaceChildren();const header=el('div','','section-head'),text=el('div');text.append(el('h2','产品使用统计'),el('p','仅管理员可见 · 北京时间','hint'));header.append(text);host.append(header);
+ const start=new Date(data.started_at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false});host.append(el('p','行为统计从 '+start+' 开始；只覆盖 0.3.2 及之后版本的已登录用户。未登录、本机体验及旧版用户暂未计入。','hint'));
+ const cards=el('div','','analytics-cards');for(const [key,label] of [['registered_total','注册账号总数'],['new_today','今日新增注册'],['new_7d','近7天新增注册'],['active_today','今日活跃人数'],['active_7d','近7天活跃人数'],['lookups_today','今日查词次数'],['questions_today','今日题目浏览次数']]){const card=el('div','','analytics-card');card.append(el('span',label,'hint'),el('strong',num(data[key])));cards.append(card);}host.append(cards);
+ host.append(el('p','系统管理账号和匿名账号不计入注册人数。活跃人数按账号去重；查词成功展示计一次，同一次结果补充加载不重复计数；题目详情每次进入计一次，不代表完成作答。离线事件按服务器接收时间归入日期。','hint'));
+ const startDay=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(data.started_at));
+ const days=data.daily||[],chart=el('div','','analytics-chart'),max=Math.max(1,...days.map(d=>Number(d.active)));chart.setAttribute('aria-label','近14天每日活跃账号人数');for(const d of days){const col=el('div','','analytics-bar-column'),bar=el('div','','analytics-bar');bar.style.height=(Number(d.active)/max*90)+'px';bar.setAttribute('aria-hidden','true');const missing=d.day<startDay;col.title=d.day+' · '+(missing?'尚未采集':num(d.active)+'人');col.append(el('span',missing?'—':num(d.active)),bar,el('small',d.day.slice(5)));chart.append(col);}host.append(el('h3','近14天活跃趋势'),chart);requestAnimationFrame(()=>{chart.scrollLeft=chart.scrollWidth;});
+ const wrap=el('div','','analytics-table-wrap'),table=el('table','','analytics-table'),head=document.createElement('thead'),row=document.createElement('tr');for(const text of ['日期','活跃人数','新增注册','查词','V题目浏览','Q题目浏览']){const th=el('th',text);th.scope='col';row.append(th);}head.append(row);table.append(head);const body=document.createElement('tbody');for(const d of [...days].reverse()){const row=document.createElement('tr');for(const [i,value] of [d.day,d.active,d.registrations,d.lookups,d.verbal,d.quant].entries())row.append(el(i===0?'th':'td',i===0?value:(d.day<startDay&&i!==2?'—':num(value))));body.append(row);}table.append(body);wrap.append(table);host.append(wrap,el('p','“—”表示当时尚未采集行为数据。不会保存所查单词、题目内容、笔记、邮箱或手机号。','hint'),el('p','更新于 '+new Date(data.generated_at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}),'hint'));
+}
