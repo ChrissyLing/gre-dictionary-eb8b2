@@ -72,7 +72,7 @@ export class CloudBaseProvider{
   const data=this.check(await this.auth.getSession()),user=data.user||data.session?.user,token=data.session?.access_token;
   if(!user||user.id!==expectedUid||!token)throw Error('登录状态已变化，请重新同步');
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
-  try{const res=await fetch(this.base+path,{...options,signal:controller.signal,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',...(options?.headers||{})}});if(!res.ok)throw Error(res.status===401?'登录已过期，请重新登录':res.status===403?'个人数据权限未配置，请联系维护者':'云端同步失败，请稍后重试');return res.status===204?[]:await res.json();}finally{clearTimeout(timeout);}
+  try{const res=await fetch(this.base+path,{...options,signal:controller.signal,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',...(options?.headers||{})}});if(!res.ok)throw Error(res.status===401?'登录已过期，请重新登录':res.status===403?'个人数据权限未配置，请联系维护者':'云端同步失败，请稍后重试');const text=await res.text();return text.trim()?JSON.parse(text):[];}finally{clearTimeout(timeout);}
  }
  async getRows(uid){const rows=[];for(let offset=0;;offset+=1000){const page=await this.request('gre_favorites_v1?select=word,payload,updated_at&owner_id=eq.'+encodeURIComponent(uid)+'&order=word.asc&limit=1000&offset='+offset,{},uid);rows.push(...page);if(page.length<1000)return rows;}}
  async putRows(rows,uid){for(let i=0;i<rows.length;i+=100)await this.request('gre_favorites_v1?on_conflict=owner_id,word',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows.slice(i,i+100).map(r=>({...r,owner_id:uid})))},uid);}
