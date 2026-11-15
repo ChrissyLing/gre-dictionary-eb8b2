@@ -184,6 +184,8 @@
     padding: 9px 13px; font-size: 13px; color: #8a6d2f; line-height: 1.65;
   }
   .related { margin-top: 9px; font-size: 13px; color: #8a8fa8; line-height: 1.65; }
+  .sense-rest > summary { font-size: 12.5px; color: #8a8fa8; cursor: pointer; margin-top: 2px; }
+  .sense-rest[open] > summary { margin-bottom: 2px; }
   .se-chip {
     max-width: 100%;
     background: #e8f8ec; color: #15803d; border: 1px solid #c6eccf; border-radius: 999px;
@@ -845,16 +847,21 @@ function mergeStudySenses(word, local, qs, reading, town, supplement) {
 }
 function mergedStudyCard(senses, local, dictionaryHtml = '') {
   if (!senses.length && !dictionaryHtml) return '';
-  const rows = senses.map(s => {
+  const rowHtml = s => {
     const sources = [...new Map(s.records.map(r => [r.sourceId, r.source])).values()];
     return `<div class="kaofa merged-sense"><div class="kf-head"><span class="kf-pos">${esc(s.pos)}</span><span class="kf-zh">${esc(s.zh)}</span>
       <span class="sense-sources"><span class="sense-source" title="${esc(sources.join('、'))}">${sources.length}份资料</span></span></div></div>`;
-  }).join('');
+  };
+  const VISIBLE_SENSES = 3;
+  const rows = senses.slice(0, VISIBLE_SENSES).map(rowHtml).join('') +
+    (senses.length > VISIBLE_SENSES + 1
+      ? `<details class="sense-rest"><summary>展开其余 ${senses.length - VISIBLE_SENSES} 条释义（与上方部分相近）</summary>${senses.slice(VISIBLE_SENSES).map(rowHtml).join('')}</details>`
+      : senses.slice(VISIBLE_SENSES).map(rowHtml).join(''));
   const originals = senses.flatMap(s => s.records).map(r => `<p><b>${esc(r.source)}</b>${r.page ? ` · PDF 第 ${r.page} 页` : ''}：${esc(r.pos)} ${esc(r.zh || '原书未列中文释义')}${r.en ? ` · ${esc(r.en)}` : ''}${r.note ? ` · 拓展：${esc(r.note)}` : ''}</p>`).join('');
   return `<section class="card" id="studyDefinitions"><h3 class="card-title">📖 释义</h3>${rows}
     ${local && local.d.mn ? `<div class="mnemonic">💡 助记：${esc(local.d.mn)}</div>` : ''}
-    <details class="source-note sense-originals" aria-label="查看各资料原文与来源"><summary>展开详情 · 英文释义与原文来源</summary>${dictionaryHtml ? `<div class="dictionary-definitions"><h4>英文词典释义</h4>${dictionaryHtml}</div>` : ''}${originals ? `<h4>各资料原文与来源</h4>${originals}` : ''}
     ${local && local.d.rel ? `<div class="related">📎 相关词：${esc(local.d.rel)}</div>` : ''}
+    <details class="source-note sense-originals" aria-label="查看各资料原文与来源"><summary>展开详情 · 英文释义与原文来源</summary>${dictionaryHtml ? `<div class="dictionary-definitions"><h4>英文词典释义</h4>${dictionaryHtml}</div>` : ''}${originals ? `<h4>各资料原文与来源</h4>${originals}` : ''}
     </details></section>`;
 }
 
