@@ -1648,7 +1648,7 @@ function handleSuggestKey(e) {
     [...suggestBox.children].forEach((el, i) => { el.classList.toggle('active', i === suggestActive); el.setAttribute('aria-selected', String(i === suggestActive)); });
     return true;
   }
-  if (e.key === 'Enter' && suggestActive >= 0) { e.preventDefault(); hideWordSuggest(); doSearch(items[suggestActive].word); return true; }
+  if (e.key === 'Enter' && suggestActive >= 0) { e.preventDefault(); const word = items[suggestActive].word; hideWordSuggest(); doSearch(word); return true; }
   if (e.key === 'Escape') { hideWordSuggest(); return true; }
   return false;
 }
